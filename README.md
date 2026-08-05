@@ -13,8 +13,10 @@ A simple Space Invaders–style shooter where you operate a **Centurion C-RAM / 
 | Input | Action |
 |--------|--------|
 | Mouse / touch | Aim turret |
-| Hold click / touch | Fire continuous tracer stream |
+| Hold click / touch | Fire continuous tracer stream (with C-RAM fire audio) |
 | Space | Start / restart |
+
+On **ENGAGE**, the system plays an **INCOMING / INCOMING / INCOMING** alert. Missiles do not approach until that callout finishes.
 
 ## Share with coworkers
 

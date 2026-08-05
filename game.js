@@ -29,7 +29,326 @@
     particles: [],
     flashes: [],
     barrelSpin: 0,
+    alerting: false,
+    combatReady: false,
+    alertFlash: 0,
   };
+
+  // Procedural audio: C-RAM warning + Vulcan/gatling fire (Web Audio + speech)
+  // Optional: drop real clips at assets/incoming.mp3 and assets/fire.mp3 to override.
+  const AudioFX = (() => {
+    let ctx = null;
+    let master = null;
+    let fireGain = null;
+    let fireSources = [];
+    let firing = false;
+    let alertToken = 0;
+    let incomingClip = null;
+    let fireClip = null;
+    let clipsTried = false;
+
+    function ensure() {
+      if (!ctx) {
+        ctx = new (window.AudioContext || window.webkitAudioContext)();
+        master = ctx.createGain();
+        master.gain.value = 0.85;
+        master.connect(ctx.destination);
+      }
+      if (ctx.state === "suspended") ctx.resume();
+      tryLoadClips();
+      return ctx;
+    }
+
+    function tryLoadClips() {
+      if (clipsTried) return;
+      clipsTried = true;
+      incomingClip = new Audio("assets/incoming.mp3");
+      incomingClip.preload = "auto";
+      fireClip = new Audio("assets/fire.mp3");
+      fireClip.preload = "auto";
+      fireClip.loop = true;
+      fireClip.volume = 0.75;
+      incomingClip.addEventListener("error", () => {
+        incomingClip = null;
+      });
+      fireClip.addEventListener("error", () => {
+        fireClip = null;
+      });
+    }
+
+    function clipReady(audio) {
+      return audio && audio.error == null && audio.readyState >= 2;
+    }
+
+    function beep(time, freq, dur, type = "square", vol = 0.18) {
+      const c = ensure();
+      const o = c.createOscillator();
+      const g = c.createGain();
+      o.type = type;
+      o.frequency.value = freq;
+      g.gain.setValueAtTime(vol, time);
+      g.gain.exponentialRampToValueAtTime(0.001, time + dur);
+      o.connect(g);
+      g.connect(master);
+      o.start(time);
+      o.stop(time + dur + 0.02);
+    }
+
+    function playAlarmBurst(startAt) {
+      const c = ensure();
+      const t0 = startAt ?? c.currentTime;
+      for (let i = 0; i < 4; i++) {
+        const t = t0 + i * 0.14;
+        beep(t, 980, 0.09, "square", 0.16);
+        beep(t + 0.05, 1320, 0.07, "square", 0.12);
+      }
+    }
+
+    function speakIncoming(onDone) {
+      const finish = () => {
+        try {
+          window.speechSynthesis.cancel();
+        } catch (_) {}
+        onDone();
+      };
+
+      if (!window.speechSynthesis) {
+        setTimeout(finish, 2800);
+        return;
+      }
+
+      window.speechSynthesis.cancel();
+      const utter = new SpeechSynthesisUtterance("Incoming. Incoming. Incoming.");
+      utter.rate = 0.92;
+      utter.pitch = 0.65;
+      utter.volume = 1;
+
+      const pickVoice = () => {
+        const voices = window.speechSynthesis.getVoices();
+        const preferred =
+          voices.find((v) => /en-US/i.test(v.lang) && /Female|Zira|Samantha|Google US/i.test(v.name)) ||
+          voices.find((v) => /en/i.test(v.lang)) ||
+          null;
+        if (preferred) utter.voice = preferred;
+      };
+      pickVoice();
+      if (!utter.voice && window.speechSynthesis.getVoices().length === 0) {
+        window.speechSynthesis.onvoiceschanged = () => {
+          pickVoice();
+          window.speechSynthesis.onvoiceschanged = null;
+        };
+      }
+
+      let done = false;
+      const once = () => {
+        if (done) return;
+        done = true;
+        finish();
+      };
+      utter.onend = once;
+      utter.onerror = once;
+      setTimeout(once, 5200);
+      window.speechSynthesis.speak(utter);
+    }
+
+    function playIncomingAlert(onComplete) {
+      const token = ++alertToken;
+      ensure();
+
+      let finished = false;
+      const done = () => {
+        if (token !== alertToken || finished) return;
+        finished = true;
+        onComplete();
+      };
+
+      if (incomingClip) {
+        incomingClip.pause();
+        incomingClip.currentTime = 0;
+        const onEnded = () => {
+          incomingClip.removeEventListener("ended", onEnded);
+          done();
+        };
+        incomingClip.addEventListener("ended", onEnded);
+        const p = incomingClip.play();
+        if (p && typeof p.then === "function") {
+          p.catch(() => {
+            incomingClip.removeEventListener("ended", onEnded);
+            playAlarmBurst();
+            speakIncoming(done);
+          });
+        }
+        setTimeout(done, 10000);
+        return;
+      }
+
+      playAlarmBurst();
+      setTimeout(() => {
+        if (token !== alertToken) return;
+        playAlarmBurst();
+      }, 1600);
+      speakIncoming(done);
+    }
+
+    function cancelAlert() {
+      alertToken += 1;
+      try {
+        window.speechSynthesis && window.speechSynthesis.cancel();
+      } catch (_) {}
+      if (incomingClip) {
+        try {
+          incomingClip.pause();
+          incomingClip.currentTime = 0;
+        } catch (_) {}
+      }
+    }
+
+    function stopFireSynth() {
+      if (fireGain && ctx) {
+        try {
+          fireGain.gain.cancelScheduledValues(ctx.currentTime);
+          fireGain.gain.setValueAtTime(fireGain.gain.value, ctx.currentTime);
+          fireGain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.08);
+        } catch (_) {}
+      }
+      for (const s of fireSources) {
+        try {
+          s.stop();
+        } catch (_) {}
+      }
+      fireSources = [];
+      fireGain = null;
+    }
+
+    function stopFire() {
+      firing = false;
+      stopFireSynth();
+      if (fireClip) {
+        try {
+          fireClip.pause();
+          fireClip.currentTime = 0;
+        } catch (_) {}
+      }
+    }
+
+    function startFireSynth() {
+      const c = ensure();
+      stopFireSynth();
+
+      fireGain = c.createGain();
+      fireGain.gain.value = 0.0001;
+      fireGain.connect(master);
+      fireGain.gain.linearRampToValueAtTime(0.55, c.currentTime + 0.04);
+
+      const pulseRate = 75;
+      const bufferSize = c.sampleRate * 0.5;
+      const noiseBuf = c.createBuffer(1, bufferSize, c.sampleRate);
+      const data = noiseBuf.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        const t = i / c.sampleRate;
+        const pulse = Math.pow(Math.max(0, Math.sin(t * pulseRate * Math.PI * 2)), 8);
+        const grit = (Math.random() * 2 - 1) * 0.7;
+        const low = Math.sin(t * 90 * Math.PI * 2) * 0.25;
+        data[i] = (grit * 0.85 + low) * (0.35 + pulse * 0.65);
+      }
+
+      const noise = c.createBufferSource();
+      noise.buffer = noiseBuf;
+      noise.loop = true;
+
+      const bp = c.createBiquadFilter();
+      bp.type = "bandpass";
+      bp.frequency.value = 1800;
+      bp.Q.value = 0.85;
+
+      const hp = c.createBiquadFilter();
+      hp.type = "highpass";
+      hp.frequency.value = 400;
+
+      const rumble = c.createOscillator();
+      rumble.type = "sawtooth";
+      rumble.frequency.value = 55;
+      const rumbleGain = c.createGain();
+      rumbleGain.gain.value = 0.08;
+
+      noise.connect(bp);
+      bp.connect(hp);
+      hp.connect(fireGain);
+      rumble.connect(rumbleGain);
+      rumbleGain.connect(fireGain);
+
+      noise.start();
+      rumble.start();
+      fireSources = [noise, rumble];
+    }
+
+    function startFire() {
+      if (firing) return;
+      ensure();
+      firing = true;
+
+      if (fireClip) {
+        fireClip.currentTime = 0;
+        const p = fireClip.play();
+        if (p && typeof p.catch === "function") {
+          p.catch(() => startFireSynth());
+        }
+        return;
+      }
+      startFireSynth();
+    }
+
+    function setFiring(on) {
+      if (on) startFire();
+      else stopFire();
+    }
+
+    function playIntercept() {
+      const c = ensure();
+      const t = c.currentTime;
+      beep(t, 220, 0.12, "sawtooth", 0.12);
+      beep(t, 90, 0.18, "triangle", 0.1);
+      const nLen = Math.floor(c.sampleRate * 0.12);
+      const buf = c.createBuffer(1, nLen, c.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < nLen; i++) {
+        d[i] = (Math.random() * 2 - 1) * (1 - i / nLen);
+      }
+      const src = c.createBufferSource();
+      src.buffer = buf;
+      const g = c.createGain();
+      g.gain.value = 0.22;
+      const f = c.createBiquadFilter();
+      f.type = "lowpass";
+      f.frequency.value = 2400;
+      src.connect(f);
+      f.connect(g);
+      g.connect(master);
+      src.start();
+    }
+
+    function playImpact() {
+      const c = ensure();
+      const t = c.currentTime;
+      beep(t, 60, 0.35, "sine", 0.25);
+      beep(t, 40, 0.45, "triangle", 0.18);
+    }
+
+    function hushAll() {
+      cancelAlert();
+      stopFire();
+    }
+
+    return {
+      ensure,
+      playIncomingAlert,
+      cancelAlert,
+      setFiring,
+      playIntercept,
+      playImpact,
+      hushAll,
+    };
+  })();
 
   const ship = {
     x: W / 2,
@@ -62,6 +381,10 @@
     state.flashes = [];
     state.lastShot = 0;
     state.barrelSpin = 0;
+    state.alerting = false;
+    state.combatReady = false;
+    state.alertFlash = 0;
+    AudioFX.setFiring(false);
     updateHud();
   }
 
@@ -88,13 +411,29 @@
   }
 
   function startGame() {
+    AudioFX.ensure();
+    AudioFX.hushAll();
     resetGame();
     state.running = true;
+    state.alerting = true;
+    state.combatReady = false;
     hideOverlay();
+
+    AudioFX.playIncomingAlert(() => {
+      if (!state.running) return;
+      state.alerting = false;
+      state.combatReady = true;
+      state.time = 0;
+      state.spawnTimer = 900; // first wave shortly after alert ends
+    });
   }
 
   function gameOver() {
     state.running = false;
+    state.alerting = false;
+    state.combatReady = false;
+    AudioFX.hushAll();
+    AudioFX.playImpact();
     showOverlay(
       "SHIP HIT — MISSION FAILED",
       `Missiles penetrated the inner defense zone.<br />Final score: <strong style="color:#e8a83a">${state.score}</strong> · Wave ${state.wave}`,
@@ -129,6 +468,7 @@
     const p = pointerToCanvas(e.clientX, e.clientY);
     setAim(p.x, p.y);
     state.fireHeld = true;
+    if (state.running) AudioFX.setFiring(true);
   });
 
   canvas.addEventListener("pointermove", (e) => {
@@ -138,10 +478,12 @@
 
   canvas.addEventListener("pointerup", () => {
     state.fireHeld = false;
+    AudioFX.setFiring(false);
   });
 
   canvas.addEventListener("pointercancel", () => {
     state.fireHeld = false;
+    AudioFX.setFiring(false);
   });
 
   startBtn.addEventListener("click", startGame);
@@ -275,6 +617,7 @@
       explode(m.x, m.y, "#ff8a4a", 28);
       explode(m.x, m.y, "#ffe08a", 14);
       state.shake = Math.min(8, state.shake + 2);
+      AudioFX.playIntercept();
       updateHud();
     }
   }
@@ -291,7 +634,9 @@
   }
 
   function update(dt) {
-    state.time += dt;
+    if (state.alerting) state.alertFlash += dt;
+
+    if (state.combatReady) state.time += dt;
 
     if (state._targetAngle == null) state._targetAngle = ciws.angle;
     let diff = state._targetAngle - ciws.angle;
@@ -302,22 +647,25 @@
     if (state.fireHeld) fire();
     else state.barrelSpin *= 0.92;
 
-    const spawnInterval = Math.max(420, 1400 - state.wave * 90);
-    state.spawnTimer += dt;
-    if (state.spawnTimer >= spawnInterval) {
-      state.spawnTimer = 0;
-      const burst = 1 + Math.floor(state.wave / 3);
-      for (let i = 0; i < burst; i++) {
-        setTimeout(() => {
-          if (state.running) spawnMissile();
-        }, i * 180);
+    // Hold missiles until "INCOMING" alert finishes
+    if (state.combatReady) {
+      const spawnInterval = Math.max(420, 1400 - state.wave * 90);
+      state.spawnTimer += dt;
+      if (state.spawnTimer >= spawnInterval) {
+        state.spawnTimer = 0;
+        const burst = 1 + Math.floor(state.wave / 3);
+        for (let i = 0; i < burst; i++) {
+          setTimeout(() => {
+            if (state.running && state.combatReady) spawnMissile();
+          }, i * 180);
+        }
       }
-    }
 
-    const nextWaveAt = state.wave * 20000;
-    if (state.time > nextWaveAt) {
-      state.wave += 1;
-      updateHud();
+      const nextWaveAt = state.wave * 20000;
+      if (state.time > nextWaveAt) {
+        state.wave += 1;
+        updateHud();
+      }
     }
 
     for (let i = state.bullets.length - 1; i >= 0; i--) {
@@ -766,6 +1114,25 @@
     ctx.stroke();
   }
 
+  function drawIncomingBanner() {
+    if (!state.alerting) return;
+    const pulse = 0.55 + 0.45 * Math.sin(state.alertFlash / 120);
+    ctx.fillStyle = `rgba(180, 30, 20, ${0.18 * pulse})`;
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = "900 42px Orbitron, sans-serif";
+    ctx.fillStyle = `rgba(255, 70, 50, ${0.75 + 0.25 * pulse})`;
+    ctx.fillText("INCOMING", W / 2, H * 0.28);
+    ctx.font = "700 18px Orbitron, sans-serif";
+    ctx.fillStyle = `rgba(255, 200, 120, ${0.7 + 0.3 * pulse})`;
+    ctx.fillText("INCOMING  ·  INCOMING  ·  INCOMING", W / 2, H * 0.28 + 40);
+    ctx.font = "14px Share Tech Mono, monospace";
+    ctx.fillStyle = "rgba(200, 220, 230, 0.75)";
+    ctx.fillText("C-RAM ALERT — STAND BY FOR ENGAGEMENT", W / 2, H * 0.28 + 72);
+  }
+
   function draw() {
     ctx.save();
     if (state.shake > 0.4) {
@@ -782,6 +1149,7 @@
     drawParticles();
     drawCiws();
     drawReticle();
+    drawIncomingBanner();
 
     ctx.fillStyle = "rgba(140, 190, 220, 0.06)";
     ctx.fillRect(0, H - 40, W, 40);
