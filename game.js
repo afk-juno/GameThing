@@ -34,10 +34,10 @@
     alertFlash: 0,
   };
 
-  // C-RAM alert from assets/incoming.mp3 (seconds 2–7). Fire synth unchanged.
+  // C-RAM alert from assets/incoming.mp3 (seconds 3–9). Fire synth unchanged.
   const AudioFX = (() => {
-    const INCOMING_OFFSET = 2;
-    const INCOMING_END = 7;
+    const INCOMING_OFFSET = 3;
+    const INCOMING_END = 9;
     const INCOMING_DUR = INCOMING_END - INCOMING_OFFSET;
     let ctx = null;
     let master = null;
