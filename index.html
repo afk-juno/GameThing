@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>PHALANX CIWS — Missile Defense</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div id="app">
+    <header id="hud">
+      <div class="hud-block">
+        <span class="label">SCORE</span>
+        <span id="score">0</span>
+      </div>
+      <div class="hud-block title-block">
+        <h1>PHALANX</h1>
+        <span class="subtitle">CLOSE-IN WEAPON SYSTEM</span>
+      </div>
+      <div class="hud-block right">
+        <span class="label">WAVE</span>
+        <span id="wave">1</span>
+        <span class="label lives-label">HULL</span>
+        <span id="lives" class="lives"></span>
+      </div>
+    </header>
+
+    <canvas id="game" width="900" height="600"></canvas>
+
+    <div id="overlay" class="overlay">
+      <div class="panel">
+        <p class="callsign">CENTURION C-RAM / LPWS</p>
+        <h2 id="overlay-title">MISSILE DEFENSE</h2>
+        <p id="overlay-text">
+          Incoming anti-ship missiles inbound.<br />
+          Track with mouse / touch. Hold for 20mm tracer stream.<br />
+          Do not let them reach the ship.
+        </p>
+        <button id="start-btn" type="button">ENGAGE</button>
+        <p class="hint">Space to start / restart · Hold click to fire</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
