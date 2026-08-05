@@ -34,7 +34,8 @@
     alertFlash: 0,
   };
 
-  // Procedural audio: user incoming clip (3s–8s) + Vulcan fire synth (unchanged)
+  // Procedural audio: C-RAM warning clip + Vulcan fire (fire sound unchanged)
+  // Prefer assets/incoming.mp3 for pre-missile alert. Optional: assets/fire.mp3
   const AudioFX = (() => {
     let ctx = null;
     let master = null;
@@ -47,11 +48,6 @@
     let fireClip = null;
     let clipsTried = false;
     let alertSource = null;
-    let alertTimer = null;
-
-    // Only play this window of assets/incoming.mp3 at mission start
-    const INCOMING_START = 3;
-    const INCOMING_END = 8;
 
     function ensure() {
       if (!ctx) {
@@ -107,6 +103,16 @@
       o.stop(time + dur + 0.02);
     }
 
+    function playAlarmBurst(startAt) {
+      const c = ensure();
+      const t0 = startAt ?? c.currentTime;
+      for (let i = 0; i < 4; i++) {
+        const t = t0 + i * 0.14;
+        beep(t, 980, 0.09, "square", 0.2);
+        beep(t + 0.05, 1320, 0.07, "square", 0.14);
+      }
+    }
+
     function playIncomingBuffer(onDone) {
       const c = ensure();
       if (!incomingBuffer) {
@@ -114,14 +120,13 @@
         return;
       }
 
-      const start = Math.min(INCOMING_START, Math.max(0, incomingBuffer.duration - 0.05));
-      const end = Math.min(INCOMING_END, incomingBuffer.duration);
-      const dur = Math.max(0.05, end - start);
-
       const src = c.createBufferSource();
       src.buffer = incomingBuffer;
+      src.playbackRate.value = 1;
+
       const g = c.createGain();
-      g.gain.value = 1;
+      g.gain.value = 1.15;
+
       src.connect(g);
       g.connect(master);
 
@@ -130,8 +135,7 @@
         alertSource = null;
         onDone();
       };
-      // Play only 3.00 → 8.00
-      src.start(0, start, dur);
+      src.start();
     }
 
     function playIncomingHtml(onDone) {
@@ -142,36 +146,19 @@
       const finish = () => {
         if (finished) return;
         finished = true;
-        if (alertTimer) {
-          clearInterval(alertTimer);
-          alertTimer = null;
-        }
-        try {
-          a.pause();
-        } catch (_) {}
         onDone();
       };
-
-      const startPlayback = () => {
-        try {
-          a.currentTime = INCOMING_START;
-        } catch (_) {}
-        const p = a.play();
-        if (p && typeof p.catch === "function") p.catch(finish);
-        alertTimer = setInterval(() => {
-          if (a.ended || a.currentTime >= INCOMING_END) finish();
-        }, 40);
-      };
-
-      if (a.readyState >= 1) startPlayback();
-      else a.addEventListener("loadedmetadata", startPlayback, { once: true });
-
+      a.addEventListener("ended", finish);
       a.addEventListener("error", finish);
-      setTimeout(finish, (INCOMING_END - INCOMING_START) * 1000 + 2000);
-
+      const p = a.play();
+      if (p && typeof p.catch === "function") p.catch(finish);
+      setTimeout(finish, 30000);
       alertSource = {
         stop() {
-          finish();
+          try {
+            a.pause();
+            a.currentTime = 0;
+          } catch (_) {}
         },
       };
     }
@@ -189,22 +176,21 @@
 
       const run = () => {
         if (token !== alertToken) return;
-        // Exact user clip only — no extra chirps/filters
-        if (incomingBuffer) playIncomingBuffer(done);
-        else playIncomingHtml(done);
+        // Play the user-provided incoming alarm; no extra TTS chirps over it
+        if (incomingBuffer) {
+          playIncomingBuffer(done);
+        } else {
+          playIncomingHtml(done);
+        }
       };
 
       const loader = incomingLoading || Promise.resolve(null);
       loader.then(run).catch(run);
-      setTimeout(done, (INCOMING_END - INCOMING_START) * 1000 + 3000);
+      setTimeout(done, 45000);
     }
 
     function cancelAlert() {
       alertToken += 1;
-      if (alertTimer) {
-        clearInterval(alertTimer);
-        alertTimer = null;
-      }
       if (alertSource) {
         try {
           alertSource.stop();

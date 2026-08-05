@@ -1,6 +1,6 @@
 Optional audio files:
 
-  incoming.mp3  — mission intro alert. Game plays ONLY seconds 3.00–8.00, then missiles spawn.
-  fire.mp3      — optional fire loop. If missing, built-in gatling synth is used.
+  incoming.mp3  — played at mission start before missiles spawn.
+  fire.mp3      — optional loop while holding fire. If missing, built-in gatling synth is used.
 
 
