@@ -34,9 +34,11 @@
     alertFlash: 0,
   };
 
-  // C-RAM alert from assets/incoming.mp3 (first 6s). Fire synth unchanged.
+  // C-RAM alert from assets/incoming.mp3 (seconds 2–7). Fire synth unchanged.
   const AudioFX = (() => {
-    const INCOMING_SECS = 6;
+    const INCOMING_OFFSET = 2;
+    const INCOMING_END = 7;
+    const INCOMING_DUR = INCOMING_END - INCOMING_OFFSET;
     let ctx = null;
     let master = null;
     let fireGain = null;
@@ -139,8 +141,9 @@
 
       alertSource = src;
       src.onended = finish;
-      const dur = Math.min(INCOMING_SECS, incomingBuffer.duration);
-      src.start(0, 0, dur);
+      const maxDur = Math.max(0, incomingBuffer.duration - INCOMING_OFFSET);
+      const dur = Math.min(INCOMING_DUR, maxDur);
+      src.start(0, INCOMING_OFFSET, dur);
       alertTimer = setTimeout(finish, dur * 1000 + 50);
     }
 
@@ -161,9 +164,16 @@
       };
       a.addEventListener("ended", finish);
       a.addEventListener("error", finish);
-      const p = a.play();
-      if (p && typeof p.catch === "function") p.catch(finish);
-      alertTimer = setTimeout(finish, INCOMING_SECS * 1000);
+      const startPlay = () => {
+        try {
+          a.currentTime = INCOMING_OFFSET;
+        } catch (_) {}
+        const p = a.play();
+        if (p && typeof p.catch === "function") p.catch(finish);
+        alertTimer = setTimeout(finish, INCOMING_DUR * 1000);
+      };
+      if (a.readyState >= 1) startPlay();
+      else a.addEventListener("loadedmetadata", startPlay, { once: true });
       alertSource = {
         stop() {
           try {
@@ -195,7 +205,7 @@
 
       const loader = incomingLoading || Promise.resolve(null);
       loader.then(run).catch(run);
-      setTimeout(done, (INCOMING_SECS + 2) * 1000);
+      setTimeout(done, (INCOMING_DUR + 2) * 1000);
     }
 
     function cancelAlert() {
