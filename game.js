@@ -34,12 +34,8 @@
     alertFlash: 0,
   };
 
-  // C-RAM alert from assets/incoming.mp3 (trimmed warning: alarm + INCOMING x3).
+  // Procedural audio: user incoming clip (3s–8s) + Vulcan fire synth (unchanged)
   const AudioFX = (() => {
-    // Play the whole alert asset (already shaved first/last 2s).
-    const INCOMING_OFFSET = 0;
-    const INCOMING_END = 8;
-    const INCOMING_DUR = INCOMING_END - INCOMING_OFFSET;
     let ctx = null;
     let master = null;
     let fireGain = null;
@@ -52,6 +48,10 @@
     let clipsTried = false;
     let alertSource = null;
     let alertTimer = null;
+
+    // Only play this window of assets/incoming.mp3 at mission start
+    const INCOMING_START = 3;
+    const INCOMING_END = 8;
 
     function ensure() {
       if (!ctx) {
@@ -107,19 +107,16 @@
       o.stop(time + dur + 0.02);
     }
 
-    function clearAlertTimer() {
-      if (alertTimer != null) {
-        clearTimeout(alertTimer);
-        alertTimer = null;
-      }
-    }
-
     function playIncomingBuffer(onDone) {
       const c = ensure();
       if (!incomingBuffer) {
         onDone();
         return;
       }
+
+      const start = Math.min(INCOMING_START, Math.max(0, incomingBuffer.duration - 0.05));
+      const end = Math.min(INCOMING_END, incomingBuffer.duration);
+      const dur = Math.max(0.05, end - start);
 
       const src = c.createBufferSource();
       src.buffer = incomingBuffer;
@@ -128,26 +125,13 @@
       src.connect(g);
       g.connect(master);
 
-      let finished = false;
-      const finish = () => {
-        if (finished) return;
-        finished = true;
-        clearAlertTimer();
+      alertSource = src;
+      src.onended = () => {
         alertSource = null;
-        try {
-          src.stop();
-        } catch (_) {}
         onDone();
       };
-
-      alertSource = src;
-      src.onended = finish;
-      // Play full trimmed alert asset (alarm + INCOMING x3)
-      const startAt = Math.min(INCOMING_OFFSET, Math.max(0, incomingBuffer.duration - 0.05));
-      const maxDur = Math.max(0.05, incomingBuffer.duration - startAt);
-      const dur = Math.min(INCOMING_DUR, maxDur);
-      src.start(0, startAt, dur);
-      alertTimer = setTimeout(finish, dur * 1000 + 80);
+      // Play only 3.00 → 8.00
+      src.start(0, start, dur);
     }
 
     function playIncomingHtml(onDone) {
@@ -158,31 +142,36 @@
       const finish = () => {
         if (finished) return;
         finished = true;
-        clearAlertTimer();
+        if (alertTimer) {
+          clearInterval(alertTimer);
+          alertTimer = null;
+        }
         try {
           a.pause();
-          a.currentTime = 0;
         } catch (_) {}
         onDone();
       };
-      a.addEventListener("ended", finish);
-      a.addEventListener("error", finish);
-      const startPlay = () => {
+
+      const startPlayback = () => {
         try {
-          a.currentTime = INCOMING_OFFSET;
+          a.currentTime = INCOMING_START;
         } catch (_) {}
         const p = a.play();
         if (p && typeof p.catch === "function") p.catch(finish);
-        alertTimer = setTimeout(finish, INCOMING_DUR * 1000);
+        alertTimer = setInterval(() => {
+          if (a.ended || a.currentTime >= INCOMING_END) finish();
+        }, 40);
       };
-      if (a.readyState >= 1) startPlay();
-      else a.addEventListener("loadedmetadata", startPlay, { once: true });
+
+      if (a.readyState >= 1) startPlayback();
+      else a.addEventListener("loadedmetadata", startPlayback, { once: true });
+
+      a.addEventListener("error", finish);
+      setTimeout(finish, (INCOMING_END - INCOMING_START) * 1000 + 2000);
+
       alertSource = {
         stop() {
-          try {
-            a.pause();
-            a.currentTime = 0;
-          } catch (_) {}
+          finish();
         },
       };
     }
@@ -190,30 +179,32 @@
     function playIncomingAlert(onComplete) {
       const token = ++alertToken;
       ensure();
-      clearAlertTimer();
 
       let finished = false;
       const done = () => {
         if (token !== alertToken || finished) return;
         finished = true;
-        clearAlertTimer();
         onComplete();
       };
 
       const run = () => {
         if (token !== alertToken) return;
+        // Exact user clip only — no extra chirps/filters
         if (incomingBuffer) playIncomingBuffer(done);
         else playIncomingHtml(done);
       };
 
       const loader = incomingLoading || Promise.resolve(null);
       loader.then(run).catch(run);
-      setTimeout(done, (INCOMING_DUR + 2) * 1000);
+      setTimeout(done, (INCOMING_END - INCOMING_START) * 1000 + 3000);
     }
 
     function cancelAlert() {
       alertToken += 1;
-      clearAlertTimer();
+      if (alertTimer) {
+        clearInterval(alertTimer);
+        alertTimer = null;
+      }
       if (alertSource) {
         try {
           alertSource.stop();
