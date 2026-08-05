@@ -38,7 +38,7 @@
   const AudioFX = (() => {
     // Play the whole alert asset (already shaved first/last 2s).
     const INCOMING_OFFSET = 0;
-    const INCOMING_END = 11;
+    const INCOMING_END = 8;
     const INCOMING_DUR = INCOMING_END - INCOMING_OFFSET;
     let ctx = null;
     let master = null;
