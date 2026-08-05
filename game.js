@@ -34,10 +34,11 @@
     alertFlash: 0,
   };
 
-  // C-RAM alert from assets/incoming.mp3 (seconds 3–9). Fire synth unchanged.
+  // C-RAM alert from assets/incoming.mp3 (full trimmed clip: alarm + INCOMING x3).
   const AudioFX = (() => {
-    const INCOMING_OFFSET = 3;
-    const INCOMING_END = 9;
+    // Play the whole alert asset (trimmed to ~15s of warning audio).
+    const INCOMING_OFFSET = 0;
+    const INCOMING_END = 15;
     const INCOMING_DUR = INCOMING_END - INCOMING_OFFSET;
     let ctx = null;
     let master = null;
@@ -141,10 +142,12 @@
 
       alertSource = src;
       src.onended = finish;
-      const maxDur = Math.max(0, incomingBuffer.duration - INCOMING_OFFSET);
+      // Play full trimmed alert asset (alarm + INCOMING x3)
+      const startAt = Math.min(INCOMING_OFFSET, Math.max(0, incomingBuffer.duration - 0.05));
+      const maxDur = Math.max(0.05, incomingBuffer.duration - startAt);
       const dur = Math.min(INCOMING_DUR, maxDur);
-      src.start(0, INCOMING_OFFSET, dur);
-      alertTimer = setTimeout(finish, dur * 1000 + 50);
+      src.start(0, startAt, dur);
+      alertTimer = setTimeout(finish, dur * 1000 + 80);
     }
 
     function playIncomingHtml(onDone) {
