@@ -1,6 +1,5 @@
-Optional real audio overrides (MP3):
+Optional audio files:
 
-  incoming.mp3  — played at mission start (INCOMING alert). Missiles wait until it ends.
-  fire.mp3      — looped while holding fire (C-RAM / Phalanx Vulcan sound).
+  incoming.wav  — robotic INCOMING alert at mission start (bundled). Missiles wait until it ends.
+  fire.mp3      — optional loop while holding fire. If missing, built-in gatling synth is used.
 
-If these files are missing, the game uses built-in synthesized alert + gatling audio.

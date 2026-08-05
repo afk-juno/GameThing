@@ -34,8 +34,8 @@
     alertFlash: 0,
   };
 
-  // Procedural audio: C-RAM warning + Vulcan/gatling fire (Web Audio + speech)
-  // Optional: drop real clips at assets/incoming.mp3 and assets/fire.mp3 to override.
+  // Procedural audio: C-RAM warning clip + Vulcan fire (fire sound unchanged)
+  // Prefer assets/incoming.wav (bundled). Optional override: assets/fire.mp3
   const AudioFX = (() => {
     let ctx = null;
     let master = null;
@@ -43,15 +43,17 @@
     let fireSources = [];
     let firing = false;
     let alertToken = 0;
-    let incomingClip = null;
+    let incomingBuffer = null;
+    let incomingLoading = null;
     let fireClip = null;
     let clipsTried = false;
+    let alertSource = null;
 
     function ensure() {
       if (!ctx) {
         ctx = new (window.AudioContext || window.webkitAudioContext)();
         master = ctx.createGain();
-        master.gain.value = 0.85;
+        master.gain.value = 0.9;
         master.connect(ctx.destination);
       }
       if (ctx.state === "suspended") ctx.resume();
@@ -62,22 +64,29 @@
     function tryLoadClips() {
       if (clipsTried) return;
       clipsTried = true;
-      incomingClip = new Audio("assets/incoming.mp3");
-      incomingClip.preload = "auto";
+
       fireClip = new Audio("assets/fire.mp3");
       fireClip.preload = "auto";
       fireClip.loop = true;
       fireClip.volume = 0.75;
-      incomingClip.addEventListener("error", () => {
-        incomingClip = null;
-      });
       fireClip.addEventListener("error", () => {
         fireClip = null;
       });
-    }
 
-    function clipReady(audio) {
-      return audio && audio.error == null && audio.readyState >= 2;
+      incomingLoading = fetch("assets/incoming.wav")
+        .then((r) => {
+          if (!r.ok) throw new Error("missing incoming.wav");
+          return r.arrayBuffer();
+        })
+        .then((ab) => ensure().decodeAudioData(ab.slice(0)))
+        .then((buf) => {
+          incomingBuffer = buf;
+          return buf;
+        })
+        .catch(() => {
+          incomingBuffer = null;
+          return null;
+        });
     }
 
     function beep(time, freq, dur, type = "square", vol = 0.18) {
@@ -99,56 +108,73 @@
       const t0 = startAt ?? c.currentTime;
       for (let i = 0; i < 4; i++) {
         const t = t0 + i * 0.14;
-        beep(t, 980, 0.09, "square", 0.16);
-        beep(t + 0.05, 1320, 0.07, "square", 0.12);
+        beep(t, 980, 0.09, "square", 0.2);
+        beep(t + 0.05, 1320, 0.07, "square", 0.14);
       }
     }
 
-    function speakIncoming(onDone) {
-      const finish = () => {
-        try {
-          window.speechSynthesis.cancel();
-        } catch (_) {}
+    function playIncomingBuffer(onDone) {
+      const c = ensure();
+      if (!incomingBuffer) {
         onDone();
-      };
-
-      if (!window.speechSynthesis) {
-        setTimeout(finish, 2800);
         return;
       }
 
-      window.speechSynthesis.cancel();
-      const utter = new SpeechSynthesisUtterance("Incoming. Incoming. Incoming.");
-      utter.rate = 0.92;
-      utter.pitch = 0.65;
-      utter.volume = 1;
+      // Radio / PA bandpass so the TTS reads more like a weapons-system speaker
+      const src = c.createBufferSource();
+      src.buffer = incomingBuffer;
+      src.playbackRate.value = 0.92;
 
-      const pickVoice = () => {
-        const voices = window.speechSynthesis.getVoices();
-        const preferred =
-          voices.find((v) => /en-US/i.test(v.lang) && /Female|Zira|Samantha|Google US/i.test(v.name)) ||
-          voices.find((v) => /en/i.test(v.lang)) ||
-          null;
-        if (preferred) utter.voice = preferred;
-      };
-      pickVoice();
-      if (!utter.voice && window.speechSynthesis.getVoices().length === 0) {
-        window.speechSynthesis.onvoiceschanged = () => {
-          pickVoice();
-          window.speechSynthesis.onvoiceschanged = null;
-        };
-      }
+      const bp = c.createBiquadFilter();
+      bp.type = "bandpass";
+      bp.frequency.value = 1400;
+      bp.Q.value = 0.7;
 
-      let done = false;
-      const once = () => {
-        if (done) return;
-        done = true;
-        finish();
+      const peaking = c.createBiquadFilter();
+      peaking.type = "peaking";
+      peaking.frequency.value = 2200;
+      peaking.gain.value = 6;
+      peaking.Q.value = 1.2;
+
+      const g = c.createGain();
+      g.gain.value = 1.35;
+
+      src.connect(bp);
+      bp.connect(peaking);
+      peaking.connect(g);
+      g.connect(master);
+
+      alertSource = src;
+      src.onended = () => {
+        alertSource = null;
+        onDone();
       };
-      utter.onend = once;
-      utter.onerror = once;
-      setTimeout(once, 5200);
-      window.speechSynthesis.speak(utter);
+      src.start();
+    }
+
+    function playIncomingHtml(onDone) {
+      const a = new Audio("assets/incoming.wav");
+      a.preload = "auto";
+      a.volume = 1;
+      let finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        onDone();
+      };
+      a.addEventListener("ended", finish);
+      a.addEventListener("error", finish);
+      const p = a.play();
+      if (p && typeof p.catch === "function") p.catch(finish);
+      setTimeout(finish, 10000);
+      alertSource = {
+        stop() {
+          try {
+            a.pause();
+            a.currentTime = 0;
+          } catch (_) {}
+        },
+      };
     }
 
     function playIncomingAlert(onComplete) {
@@ -162,44 +188,34 @@
         onComplete();
       };
 
-      if (incomingClip) {
-        incomingClip.pause();
-        incomingClip.currentTime = 0;
-        const onEnded = () => {
-          incomingClip.removeEventListener("ended", onEnded);
-          done();
-        };
-        incomingClip.addEventListener("ended", onEnded);
-        const p = incomingClip.play();
-        if (p && typeof p.then === "function") {
-          p.catch(() => {
-            incomingClip.removeEventListener("ended", onEnded);
-            playAlarmBurst();
-            speakIncoming(done);
-          });
-        }
-        setTimeout(done, 10000);
-        return;
-      }
-
-      playAlarmBurst();
-      setTimeout(() => {
+      const run = () => {
         if (token !== alertToken) return;
         playAlarmBurst();
-      }, 1600);
-      speakIncoming(done);
+        setTimeout(() => {
+          if (token !== alertToken) return;
+          if (incomingBuffer) {
+            playIncomingBuffer(done);
+            playAlarmBurst(ensure().currentTime + 0.05);
+          } else {
+            // file:// or fetch blocked — HTMLAudio still usually works
+            playIncomingHtml(done);
+            playAlarmBurst();
+          }
+        }, 350);
+      };
+
+      const loader = incomingLoading || Promise.resolve(null);
+      loader.then(run).catch(run);
+      setTimeout(done, 12000);
     }
 
     function cancelAlert() {
       alertToken += 1;
-      try {
-        window.speechSynthesis && window.speechSynthesis.cancel();
-      } catch (_) {}
-      if (incomingClip) {
+      if (alertSource) {
         try {
-          incomingClip.pause();
-          incomingClip.currentTime = 0;
+          alertSource.stop();
         } catch (_) {}
+        alertSource = null;
       }
     }
 
@@ -327,11 +343,38 @@
       src.start();
     }
 
-    function playImpact() {
+    function playDamage() {
       const c = ensure();
       const t = c.currentTime;
-      beep(t, 60, 0.35, "sine", 0.25);
-      beep(t, 40, 0.45, "triangle", 0.18);
+
+      // Hull / mount impact: deep boom + metal crack + debris
+      beep(t, 55, 0.42, "sine", 0.32);
+      beep(t, 38, 0.55, "triangle", 0.22);
+      beep(t + 0.02, 180, 0.12, "sawtooth", 0.14);
+      beep(t + 0.04, 420, 0.08, "square", 0.08);
+
+      const nLen = Math.floor(c.sampleRate * 0.35);
+      const buf = c.createBuffer(1, nLen, c.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < nLen; i++) {
+        const env = Math.pow(1 - i / nLen, 1.6);
+        d[i] = (Math.random() * 2 - 1) * env;
+      }
+      const src = c.createBufferSource();
+      src.buffer = buf;
+      const lp = c.createBiquadFilter();
+      lp.type = "lowpass";
+      lp.frequency.value = 900;
+      const g = c.createGain();
+      g.gain.value = 0.45;
+      src.connect(lp);
+      lp.connect(g);
+      g.connect(master);
+      src.start(t);
+
+      // Short damage alarm sting
+      beep(t + 0.08, 880, 0.07, "square", 0.12);
+      beep(t + 0.18, 880, 0.07, "square", 0.1);
     }
 
     function hushAll() {
@@ -345,7 +388,7 @@
       cancelAlert,
       setFiring,
       playIntercept,
-      playImpact,
+      playDamage,
       hushAll,
     };
   })();
@@ -433,7 +476,6 @@
     state.alerting = false;
     state.combatReady = false;
     AudioFX.hushAll();
-    AudioFX.playImpact();
     showOverlay(
       "SHIP HIT — MISSION FAILED",
       `Missiles penetrated the inner defense zone.<br />Final score: <strong style="color:#e8a83a">${state.score}</strong> · Wave ${state.wave}`,
@@ -629,6 +671,7 @@
     explode(m.x, ship.deckY - 10, "#ffaa55", 20);
     state.shake = 14;
     state.lives -= 1;
+    AudioFX.playDamage();
     updateHud();
     if (state.lives <= 0) gameOver();
   }
