@@ -34,9 +34,9 @@
     alertFlash: 0,
   };
 
-  // Procedural audio: C-RAM warning clip + Vulcan fire (fire sound unchanged)
-  // Prefer assets/incoming.wav (bundled). Optional override: assets/fire.mp3
+  // C-RAM alert from assets/incoming.mp3 (first 6s). Fire synth unchanged.
   const AudioFX = (() => {
+    const INCOMING_SECS = 6;
     let ctx = null;
     let master = null;
     let fireGain = null;
@@ -48,6 +48,7 @@
     let fireClip = null;
     let clipsTried = false;
     let alertSource = null;
+    let alertTimer = null;
 
     function ensure() {
       if (!ctx) {
@@ -73,9 +74,9 @@
         fireClip = null;
       });
 
-      incomingLoading = fetch("assets/incoming.wav")
+      incomingLoading = fetch("assets/incoming.mp3")
         .then((r) => {
-          if (!r.ok) throw new Error("missing incoming.wav");
+          if (!r.ok) throw new Error("missing incoming.mp3");
           return r.arrayBuffer();
         })
         .then((ab) => ensure().decodeAudioData(ab.slice(0)))
@@ -103,13 +104,10 @@
       o.stop(time + dur + 0.02);
     }
 
-    function playAlarmBurst(startAt) {
-      const c = ensure();
-      const t0 = startAt ?? c.currentTime;
-      for (let i = 0; i < 4; i++) {
-        const t = t0 + i * 0.14;
-        beep(t, 980, 0.09, "square", 0.2);
-        beep(t + 0.05, 1320, 0.07, "square", 0.14);
+    function clearAlertTimer() {
+      if (alertTimer != null) {
+        clearTimeout(alertTimer);
+        alertTimer = null;
       }
     }
 
@@ -120,53 +118,52 @@
         return;
       }
 
-      // Radio / PA bandpass so the TTS reads more like a weapons-system speaker
       const src = c.createBufferSource();
       src.buffer = incomingBuffer;
-      src.playbackRate.value = 0.92;
-
-      const bp = c.createBiquadFilter();
-      bp.type = "bandpass";
-      bp.frequency.value = 1400;
-      bp.Q.value = 0.7;
-
-      const peaking = c.createBiquadFilter();
-      peaking.type = "peaking";
-      peaking.frequency.value = 2200;
-      peaking.gain.value = 6;
-      peaking.Q.value = 1.2;
-
       const g = c.createGain();
-      g.gain.value = 1.35;
-
-      src.connect(bp);
-      bp.connect(peaking);
-      peaking.connect(g);
+      g.gain.value = 1;
+      src.connect(g);
       g.connect(master);
 
-      alertSource = src;
-      src.onended = () => {
+      let finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        clearAlertTimer();
         alertSource = null;
+        try {
+          src.stop();
+        } catch (_) {}
         onDone();
       };
-      src.start();
+
+      alertSource = src;
+      src.onended = finish;
+      const dur = Math.min(INCOMING_SECS, incomingBuffer.duration);
+      src.start(0, 0, dur);
+      alertTimer = setTimeout(finish, dur * 1000 + 50);
     }
 
     function playIncomingHtml(onDone) {
-      const a = new Audio("assets/incoming.wav");
+      const a = new Audio("assets/incoming.mp3");
       a.preload = "auto";
       a.volume = 1;
       let finished = false;
       const finish = () => {
         if (finished) return;
         finished = true;
+        clearAlertTimer();
+        try {
+          a.pause();
+          a.currentTime = 0;
+        } catch (_) {}
         onDone();
       };
       a.addEventListener("ended", finish);
       a.addEventListener("error", finish);
       const p = a.play();
       if (p && typeof p.catch === "function") p.catch(finish);
-      setTimeout(finish, 10000);
+      alertTimer = setTimeout(finish, INCOMING_SECS * 1000);
       alertSource = {
         stop() {
           try {
@@ -180,37 +177,30 @@
     function playIncomingAlert(onComplete) {
       const token = ++alertToken;
       ensure();
+      clearAlertTimer();
 
       let finished = false;
       const done = () => {
         if (token !== alertToken || finished) return;
         finished = true;
+        clearAlertTimer();
         onComplete();
       };
 
       const run = () => {
         if (token !== alertToken) return;
-        playAlarmBurst();
-        setTimeout(() => {
-          if (token !== alertToken) return;
-          if (incomingBuffer) {
-            playIncomingBuffer(done);
-            playAlarmBurst(ensure().currentTime + 0.05);
-          } else {
-            // file:// or fetch blocked — HTMLAudio still usually works
-            playIncomingHtml(done);
-            playAlarmBurst();
-          }
-        }, 350);
+        if (incomingBuffer) playIncomingBuffer(done);
+        else playIncomingHtml(done);
       };
 
       const loader = incomingLoading || Promise.resolve(null);
       loader.then(run).catch(run);
-      setTimeout(done, 12000);
+      setTimeout(done, (INCOMING_SECS + 2) * 1000);
     }
 
     function cancelAlert() {
       alertToken += 1;
+      clearAlertTimer();
       if (alertSource) {
         try {
           alertSource.stop();
