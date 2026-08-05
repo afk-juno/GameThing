@@ -34,11 +34,11 @@
     alertFlash: 0,
   };
 
-  // C-RAM alert from assets/incoming.mp3 (full trimmed clip: alarm + INCOMING x3).
+  // C-RAM alert from assets/incoming.mp3 (trimmed warning: alarm + INCOMING x3).
   const AudioFX = (() => {
-    // Play the whole alert asset (trimmed to ~15s of warning audio).
+    // Play the whole alert asset (already shaved first/last 2s).
     const INCOMING_OFFSET = 0;
-    const INCOMING_END = 15;
+    const INCOMING_END = 11;
     const INCOMING_DUR = INCOMING_END - INCOMING_OFFSET;
     let ctx = null;
     let master = null;
