@@ -18,15 +18,11 @@ A simple Space Invaders–style shooter where you operate a **Centurion C-RAM / 
 
 ## Share with coworkers
 
-### GitHub Pages (recommended)
+### Live link
 
-Gives everyone a link like `https://yourname.github.io/GameThing/` — no install.
+**Play here:** https://afk-juno.github.io/GameThing/
 
-1. Create a free [GitHub](https://github.com/join) account if you don’t have one.
-2. Create a new public repository (e.g. `GameThing`).
-3. Upload these files (`index.html`, `style.css`, `game.js`, `README.md`).
-4. In the repo: **Settings → Pages → Source → Deploy from a branch → main → / (root) → Save**.
-5. After a minute, share: `https://YOUR_USERNAME.github.io/GameThing/`
+Repo: https://github.com/afk-juno/GameThing
 
 ### Zip and send
 
