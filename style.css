@@ -89,9 +89,10 @@ h1 {
 }
 
 .subtitle {
-  font-size: 0.65rem;
-  letter-spacing: 0.35em;
+  font-size: 0.58rem;
+  letter-spacing: 0.12em;
   color: var(--steel);
+  white-space: nowrap;
 }
 
 .lives {

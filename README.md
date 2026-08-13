@@ -1,6 +1,6 @@
 # LPWS sim
 
-A simple Space Invaders–style shooter where you operate an **LPWS** (Land Phalanx Weapon System) on a fixed mount and stop incoming missiles with a dense 20mm tracer stream before they hit the emplacement.
+A simple Space Invaders–style shooter where you operate an **LPWS** (Land-Based Phalanx Weapon System) on a fixed mount and stop incoming missiles with a dense 20mm tracer stream before they hit the emplacement.
 
 ## Play locally
 
