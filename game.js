@@ -420,7 +420,7 @@
       scale: 2.2,
       hpBonus: 1,
       score: 120,
-      trail: [80, 200, 190],
+      trail: [48, 48, 50],
     },
     fast: {
       speedMul: 1.6,
@@ -445,6 +445,37 @@
   function spawnMissile() {
     const type = pickEnemyType();
     const spec = ENEMY[type];
+    const hp = Math.max(1, 2 + Math.floor(state.wave / 4) + spec.hpBonus);
+    const speed = (1.15 + state.wave * 0.18 + Math.random() * 0.4) * spec.speedMul;
+
+    if (type === "drone") {
+      const fromLeft = Math.random() < 0.5;
+      const x = fromLeft ? -56 : W + 56;
+      const y = 72 + Math.random() * 150;
+      const vx = (fromLeft ? 1 : -1) * (1.35 + state.wave * 0.12);
+      const vy = 0.22 + Math.random() * 0.12;
+      state.missiles.push({
+        type,
+        x,
+        y,
+        vx,
+        vy,
+        baseVx: vx,
+        descendMax: speed * 0.72,
+        weaveT: Math.random() * Math.PI * 2,
+        weaveAmp: 1.05 + Math.random() * 0.5,
+        angle: Math.atan2(vy, vx),
+        hp,
+        maxHp: hp,
+        hitR: spec.hitR,
+        scale: spec.scale,
+        score: spec.score,
+        trailRgb: spec.trail,
+        trail: [],
+      });
+      return;
+    }
+
     const sideBias = Math.random();
     const x =
       sideBias < 0.15
@@ -452,13 +483,11 @@
         : sideBias > 0.85
           ? W - Math.random() * 80
           : 40 + Math.random() * (W - 80);
-    const speed = (1.15 + state.wave * 0.18 + Math.random() * 0.4) * spec.speedMul;
     const targetX = mount.x + (Math.random() - 0.5) * mount.width * 0.7;
     const dx = targetX - x;
     const dy = mount.y - 20;
     const dist = Math.hypot(dx, dy) || 1;
-    const hp = Math.max(1, 2 + Math.floor(state.wave / 4) + spec.hpBonus);
-    const vx = (dx / dist) * speed * (type === "drone" ? 0.22 : 0.35);
+    const vx = (dx / dist) * speed * 0.35;
     const vy = (dy / dist) * speed;
     state.missiles.push({
       type,
@@ -467,8 +496,8 @@
       vx,
       vy,
       baseVx: vx,
-      weaveT: Math.random() * Math.PI * 2,
-      weaveAmp: type === "drone" ? 1.15 + Math.random() * 0.55 : 0,
+      weaveT: 0,
+      weaveAmp: 0,
       angle: Math.atan2(vy, vx),
       hp,
       maxHp: hp,
@@ -872,10 +901,14 @@
       if (m.trail.length > 14) m.trail.shift();
 
       if (m.type === "drone") {
+        const onScreen = m.x > 24 && m.x < W - 24;
         m.weaveT += dt * 0.0048;
-        m.vx = m.baseVx + Math.sin(m.weaveT) * m.weaveAmp;
-        if (m.x < 28) m.vx = Math.abs(m.vx);
-        if (m.x > W - 28) m.vx = -Math.abs(m.vx);
+        if (onScreen) {
+          m.vx = m.baseVx + Math.sin(m.weaveT) * m.weaveAmp;
+          m.vy = Math.min((m.vy || 0) + dt * 0.00042, m.descendMax || 1.1);
+          if (m.x < 28) m.vx = Math.abs(m.vx);
+          if (m.x > W - 28) m.vx = -Math.abs(m.vx);
+        }
       }
 
       m.x += m.vx;
@@ -1351,12 +1384,12 @@
   }
 
   function drawDrone() {
-    ctx.fillStyle = "rgba(70, 190, 185, 0.35)";
+    ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
     ctx.beginPath();
-    ctx.ellipse(2, 0, 16, 11, 0, 0, Math.PI * 2);
+    ctx.ellipse(2, 2, 16, 11, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = "#3d6e72";
+    ctx.fillStyle = "#141414";
     ctx.beginPath();
     ctx.moveTo(14, -5);
     ctx.lineTo(18, 0);
@@ -1367,15 +1400,21 @@
     ctx.closePath();
     ctx.fill();
 
-    ctx.fillStyle = "#5aaea8";
+    ctx.fillStyle = "#0a0a0a";
     ctx.fillRect(-8, -4, 16, 8);
 
-    ctx.fillStyle = "#2a4448";
-    ctx.fillRect(-2, -3, 8, 6);
-    ctx.fillStyle = "rgba(120, 230, 220, 0.8)";
-    ctx.fillRect(0, -2, 4, 4);
+    ctx.strokeStyle = "rgba(70, 70, 74, 0.9)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(-8.5, -4.5, 17, 9);
 
-    ctx.fillStyle = "#7eccc6";
+    ctx.fillStyle = "#1c1c1c";
+    ctx.fillRect(-2, -3, 8, 6);
+    ctx.fillStyle = "#3a1010";
+    ctx.fillRect(0, -2, 4, 4);
+    ctx.fillStyle = "rgba(180, 40, 40, 0.85)";
+    ctx.fillRect(1, -1, 2, 2);
+
+    ctx.fillStyle = "#111111";
     ctx.beginPath();
     ctx.moveTo(-4, -5);
     ctx.lineTo(-16, -16);
@@ -1389,8 +1428,8 @@
     ctx.closePath();
     ctx.fill();
 
-    ctx.strokeStyle = "rgba(190, 245, 235, 0.75)";
-    ctx.lineWidth = 1.4;
+    ctx.strokeStyle = "rgba(55, 55, 58, 0.95)";
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.arc(-8, -14, 5, 0, Math.PI * 2);
     ctx.stroke();
@@ -1398,7 +1437,15 @@
     ctx.arc(-8, 14, 5, 0, Math.PI * 2);
     ctx.stroke();
 
-    ctx.fillStyle = "#e8c84a";
+    ctx.fillStyle = "#2a2a2a";
+    ctx.beginPath();
+    ctx.arc(-8, -14, 1.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(-8, 14, 1.6, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#c45a4a";
     ctx.fillRect(-12, -1.5, 4, 3);
   }
 

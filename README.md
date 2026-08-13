@@ -43,7 +43,7 @@ Destroy missiles and drones before they reach the mount. You have **3 mount hits
 | Type | Look | Behavior |
 |------|------|----------|
 | Standard missile | Orange body, straight | Default speed, straight path |
-| Drone | Teal winged UAV, larger | Slower, weaves left and right |
+| Drone | Black UAV, larger | Slides in from the left or right, then weaves as it drops |
 | Fast missile | Magenta dart, slim | High speed, smaller target |
 
 Score climbs with each intercept. Waves get faster and denser.
