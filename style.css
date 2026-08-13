@@ -22,9 +22,9 @@ body {
   height: 100%;
   overflow: hidden;
   background:
-    radial-gradient(ellipse 90% 70% at 72% 8%, rgba(196, 122, 150, 0.22) 0%, transparent 52%),
-    radial-gradient(ellipse 70% 50% at 22% 12%, rgba(90, 150, 160, 0.16) 0%, transparent 48%),
-    linear-gradient(180deg, var(--bg-deep) 0%, var(--bg-dusk) 100%);
+    radial-gradient(ellipse 90% 70% at 72% 12%, rgba(214, 130, 150, 0.32) 0%, transparent 52%),
+    radial-gradient(ellipse 70% 50% at 18% 18%, rgba(110, 175, 185, 0.22) 0%, transparent 48%),
+    linear-gradient(180deg, #241536 0%, #3a2450 55%, #241c34 100%);
   color: var(--text);
   font-family: "Share Tech Mono", ui-monospace, monospace;
 }
@@ -116,7 +116,7 @@ h1 {
   width: min(900px, 100%);
   height: auto;
   aspect-ratio: 900 / 600;
-  background: #161225;
+  background: #2a2048;
   border: 1px solid rgba(154, 143, 176, 0.35);
   box-shadow:
     0 0 0 1px rgba(0, 0, 0, 0.5),

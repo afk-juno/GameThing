@@ -6,14 +6,14 @@ A simple Space Invaders–style shooter where you operate an **LPWS** (Land Phal
 
 1. Open `index.html` in a browser (Chrome, Edge, or Firefox).
 2. Click **ENGAGE** (or press Space).
-3. Move the gun with WASD or arrow keys. Aim with the mouse / finger. Hold click / touch to fire.
+3. Aim with the mouse / finger or slew with WASD. Hold click / touch to fire.
 
 ## Controls
 
 | Input | Action |
 |--------|--------|
-| WASD / arrow keys | Move the LPWS up, down, left, and right |
-| Mouse / touch | Aim turret |
+| Mouse / touch | Traverse and elevate the turret |
+| WASD / arrow keys | Slew turret (left/right traverse, up/down elevation) |
 | Hold click / touch | Fire continuous tracer stream (with LPWS fire audio) |
 | Space | Start / restart |
 

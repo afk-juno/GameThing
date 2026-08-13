@@ -382,10 +382,13 @@
 
   const TURRET_SCALE = 1.55;
   const LPWS_HOME = { x: W / 2, y: H - 112 };
+  const AIM_MIN = -Math.PI + 0.15;
+  const AIM_MAX = -0.15;
   const lpws = {
     x: LPWS_HOME.x,
     y: LPWS_HOME.y,
     angle: -Math.PI / 2,
+    azimuth: -Math.PI / 2,
     barrelLen: 58,
     fireRate: 14, // ~4300 rpm continuous stream
   };
@@ -414,6 +417,7 @@
     lpws.x = LPWS_HOME.x;
     lpws.y = LPWS_HOME.y;
     lpws.angle = -Math.PI / 2;
+    lpws.azimuth = -Math.PI / 2;
     keys.clear();
     AudioFX.setFiring(false);
     updateHud();
@@ -487,10 +491,8 @@
     const dx = x - lpws.x;
     const dy = y - lpws.y;
     let angle = Math.atan2(dy, dx);
-    const min = -Math.PI + 0.15;
-    const max = -0.15;
-    if (angle > 0) angle = angle > Math.PI / 2 ? min : max;
-    state._targetAngle = Math.max(min, Math.min(max, angle));
+    if (angle > 0) angle = angle > Math.PI / 2 ? AIM_MIN : AIM_MAX;
+    state._targetAngle = Math.max(AIM_MIN, Math.min(AIM_MAX, angle));
   }
 
   canvas.addEventListener("pointerdown", (e) => {
@@ -518,7 +520,7 @@
 
   startBtn.addEventListener("click", startGame);
 
-  function isMoveKey(code) {
+  function isSlewKey(code) {
     return (
       code === "KeyW" ||
       code === "KeyA" ||
@@ -537,7 +539,7 @@
       if (!state.running) startGame();
       return;
     }
-    if (isMoveKey(e.code)) {
+    if (isSlewKey(e.code)) {
       e.preventDefault();
       keys.add(e.code);
     }
@@ -692,27 +694,37 @@
 
     if (state.combatReady) state.time += dt;
 
-    let mx = 0;
-    let my = 0;
-    if (keys.has("KeyA") || keys.has("ArrowLeft")) mx -= 1;
-    if (keys.has("KeyD") || keys.has("ArrowRight")) mx += 1;
-    if (keys.has("KeyW") || keys.has("ArrowUp")) my -= 1;
-    if (keys.has("KeyS") || keys.has("ArrowDown")) my += 1;
-    if (mx || my) {
-      const len = Math.hypot(mx, my) || 1;
-      const speed = 0.32 * dt;
-      lpws.x += (mx / len) * speed;
-      lpws.y += (my / len) * speed;
-      lpws.x = Math.max(90, Math.min(W - 90, lpws.x));
-      lpws.y = Math.max(130, Math.min(mount.y - 36, lpws.y));
-    }
-    setAim(state.aimX, state.aimY);
+    lpws.x = LPWS_HOME.x;
+    lpws.y = LPWS_HOME.y;
 
     if (state._targetAngle == null) state._targetAngle = lpws.angle;
+
+    const slew = 0.0028 * dt;
+    if (keys.has("KeyA") || keys.has("ArrowLeft")) state._targetAngle -= slew;
+    if (keys.has("KeyD") || keys.has("ArrowRight")) state._targetAngle += slew;
+    if (keys.has("KeyW") || keys.has("ArrowUp")) {
+      const d = -Math.PI / 2 - state._targetAngle;
+      state._targetAngle += Math.sign(d) * Math.min(slew, Math.abs(d));
+    }
+    if (keys.has("KeyS") || keys.has("ArrowDown")) {
+      if (state._targetAngle > -Math.PI / 2) state._targetAngle += slew;
+      else state._targetAngle -= slew;
+    }
+    state._targetAngle = Math.max(AIM_MIN, Math.min(AIM_MAX, state._targetAngle));
+
     let diff = state._targetAngle - lpws.angle;
     while (diff > Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
     lpws.angle += diff * Math.min(1, 0.18);
+
+    const azTarget = Math.atan2(
+      Math.max(-0.5, Math.min(-0.12, Math.sin(lpws.angle) * 0.35)),
+      Math.cos(lpws.angle)
+    );
+    let azDiff = azTarget - lpws.azimuth;
+    while (azDiff > Math.PI) azDiff -= Math.PI * 2;
+    while (azDiff < -Math.PI) azDiff += Math.PI * 2;
+    lpws.azimuth += azDiff * Math.min(1, 0.16);
 
     if (state.fireHeld) fire();
     else state.barrelSpin *= 0.92;
@@ -805,56 +817,73 @@
 
   function drawBackdrop() {
     const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, "#1a1630");
-    g.addColorStop(0.3, "#2c2242");
-    g.addColorStop(0.54, "#5a3d58");
-    g.addColorStop(0.62, "#6a4a62");
-    g.addColorStop(0.63, "#3a3558");
-    g.addColorStop(1, "#1c1832");
+    g.addColorStop(0, "#241536");
+    g.addColorStop(0.22, "#3a2450");
+    g.addColorStop(0.48, "#7a4a6a");
+    g.addColorStop(0.58, "#c49aa0");
+    g.addColorStop(0.62, "#8a6a88");
+    g.addColorStop(0.63, "#4a3a68");
+    g.addColorStop(1, "#2a2048");
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
 
-    const sunX = W * 0.72;
-    const sunY = H * 0.28;
-    const sunGlow = ctx.createRadialGradient(sunX, sunY, 8, sunX, sunY, 96);
-    sunGlow.addColorStop(0, "rgba(232, 170, 170, 0.5)");
-    sunGlow.addColorStop(0.4, "rgba(196, 122, 150, 0.18)");
-    sunGlow.addColorStop(1, "rgba(196, 122, 150, 0)");
+    ctx.fillStyle = "rgba(232, 210, 230, 0.55)";
+    for (let i = 0; i < 28; i++) {
+      const sx = (i * 97 + 40) % W;
+      const sy = 12 + ((i * 53) % 210);
+      ctx.globalAlpha = 0.15 + (i % 5) * 0.06;
+      ctx.fillRect(sx, sy, 1.5, 1.5);
+    }
+    ctx.globalAlpha = 1;
+
+    const sunX = W * 0.7;
+    const sunY = H * 0.34;
+    const cyanRing = ctx.createRadialGradient(sunX, sunY, 34, sunX, sunY, 120);
+    cyanRing.addColorStop(0, "rgba(120, 190, 195, 0)");
+    cyanRing.addColorStop(0.55, "rgba(110, 175, 185, 0.18)");
+    cyanRing.addColorStop(1, "rgba(110, 175, 185, 0)");
+    ctx.fillStyle = cyanRing;
+    ctx.beginPath();
+    ctx.arc(sunX, sunY, 120, 0, Math.PI * 2);
+    ctx.fill();
+
+    const sunGlow = ctx.createRadialGradient(sunX, sunY, 6, sunX, sunY, 88);
+    sunGlow.addColorStop(0, "rgba(245, 196, 196, 0.85)");
+    sunGlow.addColorStop(0.35, "rgba(214, 130, 150, 0.4)");
+    sunGlow.addColorStop(1, "rgba(214, 130, 150, 0)");
     ctx.fillStyle = sunGlow;
     ctx.beginPath();
-    ctx.arc(sunX, sunY, 96, 0, Math.PI * 2);
+    ctx.arc(sunX, sunY, 88, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = "rgba(220, 164, 168, 0.42)";
+    ctx.fillStyle = "rgba(236, 176, 178, 0.7)";
     ctx.beginPath();
-    ctx.arc(sunX, sunY, 26, 0, Math.PI * 2);
+    ctx.arc(sunX, sunY, 32, 0, Math.PI * 2);
     ctx.fill();
-
-    const cx = W * 0.26;
-    const cy = H * 0.2;
-    const cyanGlow = ctx.createRadialGradient(cx, cy, 4, cx, cy, 72);
-    cyanGlow.addColorStop(0, "rgba(120, 176, 186, 0.2)");
-    cyanGlow.addColorStop(1, "rgba(120, 176, 186, 0)");
-    ctx.fillStyle = cyanGlow;
+    ctx.strokeStyle = "rgba(130, 186, 190, 0.35)";
+    ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(cx, cy, 72, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.arc(sunX, sunY, 44, 0, Math.PI * 2);
+    ctx.stroke();
 
     const horizon = H * 0.62;
+    ctx.fillStyle = "rgba(196, 130, 160, 0.22)";
+    ctx.fillRect(0, horizon - 6, W, 12);
+
     ctx.lineWidth = 1;
-    ctx.strokeStyle = "rgba(180, 110, 150, 0.22)";
-    for (let i = 1; i <= 14; i++) {
-      const t = i / 14;
-      const y = horizon + Math.pow(t, 1.65) * (H - horizon);
-      ctx.globalAlpha = 0.12 + t * 0.2;
+    ctx.strokeStyle = "rgba(196, 120, 168, 0.38)";
+    for (let i = 1; i <= 16; i++) {
+      const t = i / 16;
+      const y = horizon + Math.pow(t, 1.55) * (H - horizon);
+      ctx.globalAlpha = 0.18 + t * 0.32;
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(W, y);
       ctx.stroke();
     }
     ctx.globalAlpha = 1;
-    ctx.strokeStyle = "rgba(130, 168, 180, 0.16)";
-    const rays = 18;
+    ctx.strokeStyle = "rgba(110, 176, 186, 0.32)";
+    const rays = 20;
     for (let i = 0; i <= rays; i++) {
       const x = (i / rays) * W;
       ctx.beginPath();
@@ -863,7 +892,7 @@
       ctx.stroke();
     }
 
-    ctx.fillStyle = "rgba(255,255,255,0.012)";
+    ctx.fillStyle = "rgba(255, 220, 240, 0.025)";
     for (let y = 0; y < H; y += 3) {
       ctx.fillRect(0, y, W, 1);
     }
@@ -1000,10 +1029,9 @@
 
     ctx.save();
     ctx.translate(x, y - 6);
-    ctx.rotate(angle);
+    ctx.rotate(lpws.azimuth);
     ctx.scale(TURRET_SCALE, TURRET_SCALE);
 
-    // Dark mount yoke
     ctx.fillStyle = "#3a4048";
     ctx.beginPath();
     ctx.moveTo(-8, -16);
@@ -1016,7 +1044,6 @@
     ctx.fillStyle = "#2a3038";
     ctx.fillRect(-4, -10, 18, 16);
 
-    // White radome behind the gun (negative X)
     ctx.fillStyle = "#eef2f6";
     ctx.beginPath();
     ctx.moveTo(-38, 14);
@@ -1050,13 +1077,18 @@
     ctx.lineTo(-15, 6);
     ctx.stroke();
 
-    // EO/IR sensor on radome side
     ctx.fillStyle = "#d8dee6";
     ctx.fillRect(-18, -22, 12, 10);
     ctx.fillStyle = "#2a3038";
     ctx.fillRect(-15, -19, 6, 5);
     ctx.fillStyle = "rgba(74,144,200,0.75)";
     ctx.fillRect(-14, -18, 4, 3);
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(x, y - 6);
+    ctx.rotate(angle);
+    ctx.scale(TURRET_SCALE, TURRET_SCALE);
 
     // Ammo drum under breech
     ctx.fillStyle = "#4a5058";
@@ -1317,6 +1349,10 @@
       lpws.x = LPWS_HOME.x;
       lpws.y = LPWS_HOME.y;
       lpws.angle = -Math.PI / 2 + Math.sin(now / 900) * 0.25;
+      lpws.azimuth = Math.atan2(
+        Math.max(-0.5, Math.min(-0.12, Math.sin(lpws.angle) * 0.35)),
+        Math.cos(lpws.angle)
+      );
     }
     draw();
     requestAnimationFrame(loop);
