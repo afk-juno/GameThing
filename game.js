@@ -4,6 +4,8 @@
   const scoreEl = document.getElementById("score");
   const waveEl = document.getElementById("wave");
   const livesEl = document.getElementById("lives");
+  const ammoEl = document.getElementById("ammo");
+  const reloadStatusEl = document.getElementById("reload-status");
   const overlay = document.getElementById("overlay");
   const overlayTitle = document.getElementById("overlay-title");
   const overlayText = document.getElementById("overlay-text");
@@ -32,6 +34,9 @@
     alerting: false,
     combatReady: false,
     alertFlash: 0,
+    ammo: 300,
+    reloading: false,
+    reloadTimer: 0,
   };
 
   // Procedural audio: LPWS warning clip + Vulcan fire (fire sound unchanged)
@@ -384,6 +389,8 @@
   const LPWS_HOME = { x: W / 2, y: H - 112 };
   const AIM_MIN = -Math.PI + 0.15;
   const AIM_MAX = -0.15;
+  const MAX_AMMO = 300;
+  const RELOAD_MS = 3000;
   const lpws = {
     x: LPWS_HOME.x,
     y: LPWS_HOME.y,
@@ -418,6 +425,9 @@
     lpws.y = LPWS_HOME.y;
     lpws.angle = -Math.PI / 2;
     lpws.azimuth = -Math.PI / 2;
+    state.ammo = MAX_AMMO;
+    state.reloading = false;
+    state.reloadTimer = 0;
     keys.clear();
     AudioFX.setFiring(false);
     updateHud();
@@ -432,6 +442,26 @@
       pip.className = "pip" + (i >= state.lives ? " lost" : "");
       livesEl.appendChild(pip);
     }
+    updateAmmoHud();
+  }
+
+  function updateAmmoHud() {
+    ammoEl.textContent = `${state.ammo} / ${MAX_AMMO}`;
+    ammoEl.classList.toggle("low", state.ammo <= 40 && !state.reloading);
+    reloadStatusEl.hidden = !state.reloading;
+  }
+
+  function canFire() {
+    return state.running && !state.reloading && state.ammo > 0;
+  }
+
+  function requestReload() {
+    if (!state.running || state.reloading) return;
+    if (state.ammo >= MAX_AMMO) return;
+    state.reloading = true;
+    state.reloadTimer = 0;
+    AudioFX.setFiring(false);
+    updateAmmoHud();
   }
 
   function showOverlay(title, text, buttonLabel) {
@@ -500,7 +530,7 @@
     const p = pointerToCanvas(e.clientX, e.clientY);
     setAim(p.x, p.y);
     state.fireHeld = true;
-    if (state.running) AudioFX.setFiring(true);
+    if (canFire()) AudioFX.setFiring(true);
   });
 
   canvas.addEventListener("pointermove", (e) => {
@@ -537,6 +567,11 @@
     if (e.code === "Space") {
       e.preventDefault();
       if (!state.running) startGame();
+      return;
+    }
+    if (e.code === "KeyR") {
+      e.preventDefault();
+      requestReload();
       return;
     }
     if (isSlewKey(e.code)) {
@@ -588,10 +623,18 @@
   }
 
   function fire() {
+    if (!canFire()) {
+      AudioFX.setFiring(false);
+      if (state.ammo <= 0 && !state.reloading) requestReload();
+      return;
+    }
     const now = state.time;
     if (now - state.lastShot < lpws.fireRate) return;
     state.lastShot = now;
     state.barrelSpin += 0.55;
+    state.ammo -= 1;
+    updateAmmoHud();
+    if (state.ammo <= 0) requestReload();
 
     const spread = (Math.random() - 0.5) * 0.045;
     const angle = lpws.angle + spread;
@@ -726,8 +769,22 @@
     while (azDiff < -Math.PI) azDiff += Math.PI * 2;
     lpws.azimuth += azDiff * Math.min(1, 0.16);
 
-    if (state.fireHeld) fire();
-    else state.barrelSpin *= 0.92;
+    if (state.reloading) {
+      state.reloadTimer += dt;
+      if (state.reloadTimer >= RELOAD_MS) {
+        state.reloading = false;
+        state.reloadTimer = 0;
+        state.ammo = MAX_AMMO;
+        updateAmmoHud();
+        if (state.fireHeld && canFire()) AudioFX.setFiring(true);
+      }
+    }
+
+    if (state.fireHeld && canFire()) fire();
+    else {
+      state.barrelSpin *= 0.92;
+      if (state.fireHeld && !canFire()) AudioFX.setFiring(false);
+    }
 
     // Hold missiles until "INCOMING" alert finishes
     if (state.combatReady) {

@@ -15,6 +15,7 @@ A simple Space Invaders–style shooter where you operate an **LPWS** (Land-Base
 | Mouse / touch | Traverse and elevate the turret |
 | WASD / arrow keys | Slew turret (left/right traverse, up/down elevation) |
 | Hold click / touch | Fire continuous tracer stream (with LPWS fire audio) |
+| R | Reload (3 seconds; also auto-reloads at 0) |
 | Space | Start / restart |
 
 On **ENGAGE**, the system plays an **INCOMING / INCOMING / INCOMING** alert. Missiles do not approach until that callout finishes.

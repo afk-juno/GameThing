@@ -67,17 +67,48 @@ body {
   color: var(--muted);
 }
 
-.lives-label {
+.lives-label,
+.ammo-label {
   margin-top: 0.35rem;
 }
 
 #score,
-#wave {
+#wave,
+.ammo-count {
   font-family: Orbitron, sans-serif;
   font-weight: 700;
   font-size: 1.5rem;
   color: var(--amber);
   letter-spacing: 0.06em;
+}
+
+.ammo-count {
+  font-size: 1.15rem;
+}
+
+.ammo-count.low {
+  color: var(--alert);
+}
+
+.reload-status {
+  font-size: 0.68rem;
+  letter-spacing: 0.18em;
+  color: var(--amber);
+  animation: reload-pulse 0.7s ease-in-out infinite;
+}
+
+.reload-status[hidden] {
+  display: none;
+}
+
+@keyframes reload-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 h1 {
@@ -210,6 +241,11 @@ h1 {
   .title-block {
     grid-column: 1 / -1;
     order: -1;
+  }
+
+  .subtitle {
+    white-space: normal;
+    letter-spacing: 0.08em;
   }
 
   #app {
