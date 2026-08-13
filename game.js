@@ -400,6 +400,7 @@
   const RELOAD_MS = 3000;
   const INFINITE_AMMO_MS = 5000;
   const CRATE_HIT_R = 24;
+  const CRATE_DROP_CHANCE = 0.28;
   const MAX_BULLET_RANGE = H * 0.7;
   const AIRBURST_AOE = 36;
   const AIRBURST_LIFE = 11;
@@ -847,7 +848,9 @@
     const [cr, cg, cb] = m.trailRgb || [255, 138, 74];
     explode(m.x, m.y, `rgb(${cr},${cg},${cb})`, 28);
     explode(m.x, m.y, "#ffe08a", 14);
-    if (m.type === "drone") spawnAmmoCrate(m.x, m.y);
+    if (m.type === "drone" && Math.random() < CRATE_DROP_CHANCE) {
+      spawnAmmoCrate(m.x, m.y);
+    }
     state.shake = Math.min(8, state.shake + 2);
     AudioFX.playIntercept();
     updateHud();
