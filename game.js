@@ -30,6 +30,7 @@
     bullets: [],
     missiles: [],
     crates: [],
+    bursts: [],
     particles: [],
     flashes: [],
     barrelSpin: 0,
@@ -399,6 +400,9 @@
   const RELOAD_MS = 3000;
   const INFINITE_AMMO_MS = 5000;
   const CRATE_HIT_R = 24;
+  const MAX_BULLET_RANGE = H * 0.7;
+  const AIRBURST_AOE = 36;
+  const AIRBURST_LIFE = 11;
   const lpws = {
     x: LPWS_HOME.x,
     y: LPWS_HOME.y,
@@ -527,6 +531,7 @@
     state.bullets = [];
     state.missiles = [];
     state.crates = [];
+    state.bursts = [];
     state.particles = [];
     state.flashes = [];
     state.lastShot = 0;
@@ -774,10 +779,11 @@
     state.bullets.push({
       x: muzzle.x,
       y: muzzle.y,
+      ox: muzzle.x,
+      oy: muzzle.y,
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed,
       angle,
-      life: 42,
       trail: 14 + Math.random() * 6,
     });
 
@@ -833,23 +839,55 @@
     }
   }
 
-  function hitMissile(m, bi) {
-    state.bullets.splice(bi, 1);
-    m.hp -= 1;
-    // spark on hit
+  function destroyEnemy(m) {
+    const idx = state.missiles.indexOf(m);
+    if (idx < 0) return;
+    state.missiles.splice(idx, 1);
+    state.score += m.score + state.wave * 10;
+    const [cr, cg, cb] = m.trailRgb || [255, 138, 74];
+    explode(m.x, m.y, `rgb(${cr},${cg},${cb})`, 28);
+    explode(m.x, m.y, "#ffe08a", 14);
+    if (m.type === "drone") spawnAmmoCrate(m.x, m.y);
+    state.shake = Math.min(8, state.shake + 2);
+    AudioFX.playIntercept();
+    updateHud();
+  }
+
+  function damageEnemy(m, amount = 1) {
+    if (!m || m.hp <= 0) return;
+    m.hp -= amount;
     explode(m.x, m.y, "#ffe08a", 4);
-    if (m.hp <= 0) {
-      const idx = state.missiles.indexOf(m);
-      if (idx >= 0) state.missiles.splice(idx, 1);
-      state.score += m.score + state.wave * 10;
-      const [cr, cg, cb] = m.trailRgb || [255, 138, 74];
-      explode(m.x, m.y, `rgb(${cr},${cg},${cb})`, 28);
-      explode(m.x, m.y, "#ffe08a", 14);
-      if (m.type === "drone") spawnAmmoCrate(m.x, m.y);
-      state.shake = Math.min(8, state.shake + 2);
-      AudioFX.playIntercept();
-      updateHud();
+    if (m.hp <= 0) destroyEnemy(m);
+  }
+
+  function spawnAirburst(x, y) {
+    state.bursts.push({
+      x,
+      y,
+      r: 4,
+      life: AIRBURST_LIFE,
+      maxLife: AIRBURST_LIFE,
+    });
+    explode(x, y, "#ffe08a", 6);
+    explode(x, y, "#ff8a4a", 5);
+
+    const splash = AIRBURST_AOE;
+    for (let i = state.missiles.length - 1; i >= 0; i--) {
+      const m = state.missiles[i];
+      const reach = splash + (m.hitR || MISSILE_HIT_R) * 0.3;
+      if (Math.hypot(m.x - x, m.y - y) <= reach) {
+        damageEnemy(m, 1);
+      }
     }
+  }
+
+  function detonateBullet(bi) {
+    const b = state.bullets[bi];
+    if (!b) return;
+    const x = b.x;
+    const y = b.y;
+    state.bullets.splice(bi, 1);
+    spawnAirburst(x, y);
   }
 
   function missileImpact(m) {
@@ -962,9 +1000,15 @@
       const b = state.bullets[i];
       b.x += b.vx;
       b.y += b.vy;
-      b.life -= 1;
-      if (b.life <= 0 || b.x < -20 || b.x > W + 20 || b.y < -20 || b.y > H + 20) {
-        state.bullets.splice(i, 1);
+      const traveled = Math.hypot(b.x - b.ox, b.y - b.oy);
+      if (
+        traveled >= MAX_BULLET_RANGE ||
+        b.x < -24 ||
+        b.x > W + 24 ||
+        b.y < -24 ||
+        b.y > H + 24
+      ) {
+        detonateBullet(i);
       }
     }
 
@@ -1044,7 +1088,7 @@
         const dx = b.x - m.x;
         const dy = b.y - m.y;
         if (dx * dx + dy * dy < r * r) {
-          hitMissile(m, bi);
+          detonateBullet(bi);
           break;
         }
       }
@@ -1066,6 +1110,14 @@
     for (let i = state.flashes.length - 1; i >= 0; i--) {
       state.flashes[i].life -= 1;
       if (state.flashes[i].life <= 0) state.flashes.splice(i, 1);
+    }
+
+    for (let i = state.bursts.length - 1; i >= 0; i--) {
+      const burst = state.bursts[i];
+      burst.life -= 1;
+      const t = 1 - burst.life / burst.maxLife;
+      burst.r = 4 + AIRBURST_AOE * t;
+      if (burst.life <= 0) state.bursts.splice(i, 1);
     }
 
     if (state.shake > 0) state.shake *= 0.88;
@@ -1681,6 +1733,24 @@
     }
   }
 
+  function drawBursts() {
+    for (const burst of state.bursts) {
+      const t = burst.life / burst.maxLife;
+      ctx.beginPath();
+      ctx.arc(burst.x, burst.y, burst.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255, 210, 120, ${0.18 * t})`;
+      ctx.fill();
+      ctx.strokeStyle = `rgba(255, 240, 180, ${0.85 * t})`;
+      ctx.lineWidth = 2.2;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(burst.x, burst.y, Math.max(2, burst.r * 0.45), 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(255, 120, 50, ${0.7 * t})`;
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+    }
+  }
+
   function drawParticles() {
     for (const p of state.particles) {
       ctx.globalAlpha = Math.max(0, p.life / (p.smoke ? 40 : 40));
@@ -1746,6 +1816,7 @@
     drawMissiles();
     drawCrates();
     drawBullets();
+    drawBursts();
     drawParticles();
     drawLpws();
     drawReticle();
