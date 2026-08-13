@@ -405,6 +405,81 @@
   const MISSILE_HIT_R = 28;
   const MISSILE_SCALE = 1.75;
 
+  const ENEMY = {
+    standard: {
+      speedMul: 1,
+      hitR: 28,
+      scale: 1.75,
+      hpBonus: 0,
+      score: 100,
+      trail: [255, 160, 80],
+    },
+    drone: {
+      speedMul: 0.55,
+      hitR: 46,
+      scale: 2.2,
+      hpBonus: 1,
+      score: 120,
+      trail: [80, 200, 190],
+    },
+    fast: {
+      speedMul: 1.6,
+      hitR: 18,
+      scale: 1.2,
+      hpBonus: -1,
+      score: 160,
+      trail: [220, 90, 170],
+    },
+  };
+
+  function pickEnemyType() {
+    const r = Math.random();
+    const w = state.wave;
+    const droneP = Math.min(0.34, 0.1 + w * 0.04);
+    const fastP = w <= 1 ? 0.08 : Math.min(0.3, 0.12 + w * 0.03);
+    if (r < droneP) return "drone";
+    if (r < droneP + fastP) return "fast";
+    return "standard";
+  }
+
+  function spawnMissile() {
+    const type = pickEnemyType();
+    const spec = ENEMY[type];
+    const sideBias = Math.random();
+    const x =
+      sideBias < 0.15
+        ? Math.random() * 80
+        : sideBias > 0.85
+          ? W - Math.random() * 80
+          : 40 + Math.random() * (W - 80);
+    const speed = (1.15 + state.wave * 0.18 + Math.random() * 0.4) * spec.speedMul;
+    const targetX = mount.x + (Math.random() - 0.5) * mount.width * 0.7;
+    const dx = targetX - x;
+    const dy = mount.y - 20;
+    const dist = Math.hypot(dx, dy) || 1;
+    const hp = Math.max(1, 2 + Math.floor(state.wave / 4) + spec.hpBonus);
+    const vx = (dx / dist) * speed * (type === "drone" ? 0.22 : 0.35);
+    const vy = (dy / dist) * speed;
+    state.missiles.push({
+      type,
+      x,
+      y: -30 - Math.random() * 50,
+      vx,
+      vy,
+      baseVx: vx,
+      weaveT: Math.random() * Math.PI * 2,
+      weaveAmp: type === "drone" ? 1.15 + Math.random() * 0.55 : 0,
+      angle: Math.atan2(vy, vx),
+      hp,
+      maxHp: hp,
+      hitR: spec.hitR,
+      scale: spec.scale,
+      score: spec.score,
+      trailRgb: spec.trail,
+      trail: [],
+    });
+  }
+
   function resetGame() {
     state.score = 0;
     state.wave = 1;
@@ -586,33 +661,6 @@
 
   window.addEventListener("blur", () => keys.clear());
 
-  function spawnMissile() {
-    const sideBias = Math.random();
-    const x =
-      sideBias < 0.15
-        ? Math.random() * 80
-        : sideBias > 0.85
-          ? W - Math.random() * 80
-          : 40 + Math.random() * (W - 80);
-    const speed = 1.15 + state.wave * 0.18 + Math.random() * 0.4;
-    const targetX = mount.x + (Math.random() - 0.5) * mount.width * 0.7;
-    const dx = targetX - x;
-    const dy = mount.y - 20;
-    const dist = Math.hypot(dx, dy) || 1;
-    // Dense tracer stream: missiles need a short burst to kill
-    const hp = 2 + Math.floor(state.wave / 4);
-    state.missiles.push({
-      x,
-      y: -30 - Math.random() * 50,
-      vx: (dx / dist) * speed * 0.35,
-      vy: (dy / dist) * speed,
-      angle: Math.atan2(dy, dx),
-      hp,
-      maxHp: hp,
-      trail: [],
-    });
-  }
-
   function muzzlePos(angle) {
     const pivotY = lpws.y - 6;
     const len = (lpws.barrelLen + 16) * TURRET_SCALE;
@@ -711,8 +759,9 @@
     if (m.hp <= 0) {
       const idx = state.missiles.indexOf(m);
       if (idx >= 0) state.missiles.splice(idx, 1);
-      state.score += 100 + state.wave * 10;
-      explode(m.x, m.y, "#ff8a4a", 28);
+      state.score += m.score + state.wave * 10;
+      const [cr, cg, cb] = m.trailRgb || [255, 138, 74];
+      explode(m.x, m.y, `rgb(${cr},${cg},${cb})`, 28);
       explode(m.x, m.y, "#ffe08a", 14);
       state.shake = Math.min(8, state.shake + 2);
       AudioFX.playIntercept();
@@ -821,6 +870,14 @@
       const m = state.missiles[i];
       m.trail.push({ x: m.x, y: m.y });
       if (m.trail.length > 14) m.trail.shift();
+
+      if (m.type === "drone") {
+        m.weaveT += dt * 0.0048;
+        m.vx = m.baseVx + Math.sin(m.weaveT) * m.weaveAmp;
+        if (m.x < 28) m.vx = Math.abs(m.vx);
+        if (m.x > W - 28) m.vx = -Math.abs(m.vx);
+      }
+
       m.x += m.vx;
       m.y += m.vy;
       m.angle = Math.atan2(m.vy, m.vx);
@@ -837,14 +894,14 @@
       }
     }
 
-    const hitR2 = MISSILE_HIT_R * MISSILE_HIT_R;
     for (let bi = state.bullets.length - 1; bi >= 0; bi--) {
       const b = state.bullets[bi];
       for (let mi = 0; mi < state.missiles.length; mi++) {
         const m = state.missiles[mi];
+        const r = m.hitR || MISSILE_HIT_R;
         const dx = b.x - m.x;
         const dy = b.y - m.y;
-        if (dx * dx + dy * dy < hitR2) {
+        if (dx * dx + dy * dy < r * r) {
           hitMissile(m, bi);
           break;
         }
@@ -1212,14 +1269,15 @@
   }
 
   function drawMissiles() {
-    const s = MISSILE_SCALE;
     for (const m of state.missiles) {
+      const s = m.scale || MISSILE_SCALE;
+      const [tr, tg, tb] = m.trailRgb || [255, 160, 80];
       for (let i = 0; i < m.trail.length; i++) {
         const t = m.trail[i];
         const a = (i / m.trail.length) * 0.5;
-        ctx.fillStyle = `rgba(255, 160, 80, ${a})`;
+        ctx.fillStyle = `rgba(${tr}, ${tg}, ${tb}, ${a})`;
         ctx.beginPath();
-        ctx.arc(t.x, t.y, (2.5 + i * 0.35) * s * 0.55, 0, Math.PI * 2);
+        ctx.arc(t.x, t.y, (2.2 + i * 0.32) * s * 0.5, 0, Math.PI * 2);
         ctx.fill();
       }
 
@@ -1228,64 +1286,164 @@
       ctx.rotate(m.angle);
       ctx.scale(s, s);
 
-      const body = ctx.createLinearGradient(-18, 0, 22, 0);
-      body.addColorStop(0, "#ff6a3a");
-      body.addColorStop(0.25, "#e8e0d0");
-      body.addColorStop(1, "#a09888");
-      ctx.fillStyle = body;
-      ctx.beginPath();
-      ctx.moveTo(22, 0);
-      ctx.lineTo(-12, -7);
-      ctx.lineTo(-18, 0);
-      ctx.lineTo(-12, 7);
-      ctx.closePath();
-      ctx.fill();
-
-      // Nose tip
-      ctx.fillStyle = "#ff4a2a";
-      ctx.beginPath();
-      ctx.moveTo(22, 0);
-      ctx.lineTo(14, -4);
-      ctx.lineTo(14, 4);
-      ctx.closePath();
-      ctx.fill();
-
-      ctx.fillStyle = "#8a4030";
-      ctx.beginPath();
-      ctx.moveTo(-10, -7);
-      ctx.lineTo(-18, -14);
-      ctx.lineTo(-6, -3);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(-10, 7);
-      ctx.lineTo(-18, 14);
-      ctx.lineTo(-6, 3);
-      ctx.fill();
-
-      // Mid fins
-      ctx.fillStyle = "#6a3828";
-      ctx.beginPath();
-      ctx.moveTo(2, -6);
-      ctx.lineTo(-2, -12);
-      ctx.lineTo(6, -4);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(2, 6);
-      ctx.lineTo(-2, 12);
-      ctx.lineTo(6, 4);
-      ctx.fill();
-
-      ctx.fillStyle = "rgba(255,120,40,0.85)";
-      ctx.beginPath();
-      ctx.arc(-20, 0, 5.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "rgba(255,220,120,0.7)";
-      ctx.beginPath();
-      ctx.arc(-18, 0, 3, 0, Math.PI * 2);
-      ctx.fill();
+      if (m.type === "drone") drawDrone();
+      else if (m.type === "fast") drawFastMissile();
+      else drawStandardMissile();
 
       ctx.restore();
     }
+  }
+
+  function drawStandardMissile() {
+    const body = ctx.createLinearGradient(-18, 0, 22, 0);
+    body.addColorStop(0, "#ff6a3a");
+    body.addColorStop(0.25, "#e8e0d0");
+    body.addColorStop(1, "#a09888");
+    ctx.fillStyle = body;
+    ctx.beginPath();
+    ctx.moveTo(22, 0);
+    ctx.lineTo(-12, -7);
+    ctx.lineTo(-18, 0);
+    ctx.lineTo(-12, 7);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = "#ff4a2a";
+    ctx.beginPath();
+    ctx.moveTo(22, 0);
+    ctx.lineTo(14, -4);
+    ctx.lineTo(14, 4);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = "#8a4030";
+    ctx.beginPath();
+    ctx.moveTo(-10, -7);
+    ctx.lineTo(-18, -14);
+    ctx.lineTo(-6, -3);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-10, 7);
+    ctx.lineTo(-18, 14);
+    ctx.lineTo(-6, 3);
+    ctx.fill();
+
+    ctx.fillStyle = "#6a3828";
+    ctx.beginPath();
+    ctx.moveTo(2, -6);
+    ctx.lineTo(-2, -12);
+    ctx.lineTo(6, -4);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(2, 6);
+    ctx.lineTo(-2, 12);
+    ctx.lineTo(6, 4);
+    ctx.fill();
+
+    ctx.fillStyle = "rgba(255,120,40,0.85)";
+    ctx.beginPath();
+    ctx.arc(-20, 0, 5.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "rgba(255,220,120,0.7)";
+    ctx.beginPath();
+    ctx.arc(-18, 0, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function drawDrone() {
+    ctx.fillStyle = "rgba(70, 190, 185, 0.35)";
+    ctx.beginPath();
+    ctx.ellipse(2, 0, 16, 11, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#3d6e72";
+    ctx.beginPath();
+    ctx.moveTo(14, -5);
+    ctx.lineTo(18, 0);
+    ctx.lineTo(14, 5);
+    ctx.lineTo(-10, 6);
+    ctx.lineTo(-14, 0);
+    ctx.lineTo(-10, -6);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = "#5aaea8";
+    ctx.fillRect(-8, -4, 16, 8);
+
+    ctx.fillStyle = "#2a4448";
+    ctx.fillRect(-2, -3, 8, 6);
+    ctx.fillStyle = "rgba(120, 230, 220, 0.8)";
+    ctx.fillRect(0, -2, 4, 4);
+
+    ctx.fillStyle = "#7eccc6";
+    ctx.beginPath();
+    ctx.moveTo(-4, -5);
+    ctx.lineTo(-16, -16);
+    ctx.lineTo(6, -7);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-4, 5);
+    ctx.lineTo(-16, 16);
+    ctx.lineTo(6, 7);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = "rgba(190, 245, 235, 0.75)";
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.arc(-8, -14, 5, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(-8, 14, 5, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.fillStyle = "#e8c84a";
+    ctx.fillRect(-12, -1.5, 4, 3);
+  }
+
+  function drawFastMissile() {
+    const body = ctx.createLinearGradient(-16, 0, 26, 0);
+    body.addColorStop(0, "#c45a9a");
+    body.addColorStop(0.35, "#e8d0e0");
+    body.addColorStop(1, "#8a6a88");
+    ctx.fillStyle = body;
+    ctx.beginPath();
+    ctx.moveTo(26, 0);
+    ctx.lineTo(-8, -3.5);
+    ctx.lineTo(-16, 0);
+    ctx.lineTo(-8, 3.5);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = "#e85a9a";
+    ctx.beginPath();
+    ctx.moveTo(26, 0);
+    ctx.lineTo(16, -2.4);
+    ctx.lineTo(16, 2.4);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = "#6a3858";
+    ctx.beginPath();
+    ctx.moveTo(-6, -3.5);
+    ctx.lineTo(-14, -9);
+    ctx.lineTo(-2, -1.5);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-6, 3.5);
+    ctx.lineTo(-14, 9);
+    ctx.lineTo(-2, 1.5);
+    ctx.fill();
+
+    ctx.fillStyle = "rgba(230, 90, 180, 0.9)";
+    ctx.beginPath();
+    ctx.arc(-17, 0, 3.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "rgba(255, 190, 230, 0.8)";
+    ctx.beginPath();
+    ctx.arc(-15, 0, 1.8, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   function drawBullets() {

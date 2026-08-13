@@ -38,4 +38,12 @@ Upload the folder to [Netlify Drop](https://app.netlify.com/drop) for a shareabl
 
 ## Goal
 
-Destroy missiles before they reach the mount. You have **3 mount hits**. Waves get faster and denser. Score climbs with each intercept.
+Destroy missiles and drones before they reach the mount. You have **3 mount hits**. Waves mix three threats:
+
+| Type | Look | Behavior |
+|------|------|----------|
+| Standard missile | Orange body, straight | Default speed, straight path |
+| Drone | Teal winged UAV, larger | Slower, weaves left and right |
+| Fast missile | Magenta dart, slim | High speed, smaller target |
+
+Score climbs with each intercept. Waves get faster and denser.
