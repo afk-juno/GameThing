@@ -43,7 +43,14 @@ Destroy missiles and drones before they reach the mount. Destroyed **drones can 
 | Type | Look | Behavior |
 |------|------|----------|
 | Standard missile | Orange body, straight | Default speed, straight path |
-| Drone | Black UAV, larger | Slides in from the left or right, then weaves as it drops |
-| Fast missile | Magenta dart, slim | High speed, smaller target |
+| Supply drone | Black UAV, larger | Slides in from the left or right, then weaves as it drops |
+| Fast mortar | Magenta dart, slim | High speed, smaller target |
 
-Score climbs with each intercept. Waves scale: **10 + (wave × 5)** threats, spawn delay **−10%** per wave (min 0.3s), and speed **+5%** per wave. A 3-second **WAVE COMPLETE** break lets you reload.
+Spawn mix depends on the wave:
+
+- Wave 1: 100% standard missiles
+- Waves 2–3: 70% missiles, 20% mortars, 10% drones
+- Waves 4+: 50% missiles, 30% mortars, 20% drones
+- **Swarm waves:** every 5th wave from wave 5 onward (5, 10, 15…) doubles spawn rate and is mostly fast mortars plus low-health drones
+
+Score climbs with each intercept. Waves scale: **10 + (wave × 5)** threats, spawn delay **−10%** per wave (min 0.3s; swarm waves use half that delay), and speed **+5%** per wave. A 3-second **WAVE COMPLETE** break lets you reload.

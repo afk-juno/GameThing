@@ -48,6 +48,7 @@
     spawnedThisWave: 0,
     waveBreak: false,
     waveBreakTimer: 0,
+    swarmBanner: 0,
   };
 
   // Procedural audio: LPWS warning clip + Vulcan fire (fire sound unchanged)
@@ -443,7 +444,7 @@
       score: 120,
       trail: [48, 48, 50],
     },
-    fast: {
+    mortar: {
       speedMul: 1.6,
       hitR: 18,
       scale: 1.2,
@@ -457,8 +458,14 @@
     return 10 + wave * 5;
   }
 
+  function isSwarmWave(wave) {
+    return wave >= 5 && wave % 5 === 0;
+  }
+
   function spawnDelayMs(wave) {
-    return Math.max(MIN_SPAWN_MS, BASE_SPAWN_MS * Math.pow(0.9, wave - 1));
+    let delay = Math.max(MIN_SPAWN_MS, BASE_SPAWN_MS * Math.pow(0.9, wave - 1));
+    if (isSwarmWave(wave)) delay = Math.max(MIN_SPAWN_MS * 0.5, delay / 2);
+    return delay;
   }
 
   function waveSpeedScale(wave) {
@@ -471,22 +478,35 @@
     state.spawnTimer = 0;
     state.waveBreak = false;
     state.waveBreakTimer = 0;
+    state.swarmBanner = isSwarmWave(state.wave) ? 2400 : 0;
     updateHud();
   }
+
   function pickEnemyType() {
     const r = Math.random();
     const w = state.wave;
-    const droneP = Math.min(0.34, 0.1 + w * 0.04);
-    const fastP = w <= 1 ? 0.08 : Math.min(0.3, 0.12 + w * 0.03);
-    if (r < droneP) return "drone";
-    if (r < droneP + fastP) return "fast";
-    return "standard";
+    if (isSwarmWave(w)) {
+      if (r < 0.6) return "mortar";
+      if (r < 0.95) return "drone";
+      return "standard";
+    }
+    if (w <= 1) return "standard";
+    if (w <= 3) {
+      if (r < 0.7) return "standard";
+      if (r < 0.9) return "mortar";
+      return "drone";
+    }
+    if (r < 0.5) return "standard";
+    if (r < 0.8) return "mortar";
+    return "drone";
   }
 
   function spawnMissile() {
     const type = pickEnemyType();
     const spec = ENEMY[type];
-    const hp = Math.max(1, 2 + Math.floor(state.wave / 4) + spec.hpBonus);
+    const hp = isSwarmWave(state.wave) && type === "drone"
+      ? 1
+      : Math.max(1, 2 + Math.floor(state.wave / 4) + spec.hpBonus);
     const speedScale = waveSpeedScale(state.wave);
     const speed = (BASE_FALL_SPEED + Math.random() * 0.35) * spec.speedMul * speedScale;
 
@@ -561,6 +581,7 @@
     state.spawnedThisWave = 0;
     state.waveBreak = false;
     state.waveBreakTimer = 0;
+    state.swarmBanner = 0;
     state.shake = 0;
     state.bullets = [];
     state.missiles = [];
@@ -591,7 +612,9 @@
 
   function updateHud() {
     scoreEl.textContent = String(state.score);
-    waveEl.textContent = String(state.wave);
+    waveEl.textContent = isSwarmWave(state.wave)
+      ? `${state.wave} SWARM`
+      : String(state.wave);
     livesEl.innerHTML = "";
     for (let i = 0; i < 3; i++) {
       const pip = document.createElement("span");
@@ -993,6 +1016,7 @@
       }
     }
     if (state.turretGlow > 0) state.turretGlow = Math.max(0, state.turretGlow - dt);
+    if (state.swarmBanner > 0) state.swarmBanner = Math.max(0, state.swarmBanner - dt);
 
     if (state.reloading && !state.infiniteAmmo) {
       state.reloadTimer += dt;
@@ -1563,7 +1587,7 @@
       ctx.scale(s, s);
 
       if (m.type === "drone") drawDrone();
-      else if (m.type === "fast") drawFastMissile();
+      else if (m.type === "mortar") drawFastMissile();
       else drawStandardMissile();
 
       ctx.restore();
@@ -1859,6 +1883,32 @@
     ctx.font = "14px Share Tech Mono, monospace";
     ctx.fillStyle = "rgba(200, 220, 230, 0.75)";
     ctx.fillText(`NEXT WAVE IN ${secs}`, W / 2, H * 0.3 + 70);
+    if (isSwarmWave(state.wave + 1)) {
+      ctx.font = "700 15px Orbitron, sans-serif";
+      ctx.fillStyle = `rgba(242, 196, 176, ${0.75 + 0.25 * pulse})`;
+      ctx.fillText("SWARM WAVE INCOMING", W / 2, H * 0.3 + 98);
+    }
+  }
+
+  function drawSwarmBanner() {
+    if (state.swarmBanner <= 0) return;
+    const fade = Math.min(1, state.swarmBanner / 700);
+    const pulse = 0.7 + 0.3 * Math.sin(performance.now() / 120);
+
+    ctx.save();
+    ctx.globalAlpha = fade;
+    ctx.fillStyle = `rgba(90, 18, 22, ${0.42 * pulse})`;
+    ctx.fillRect(0, H * 0.16, W, 78);
+
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = "900 34px Orbitron, sans-serif";
+    ctx.fillStyle = `rgba(255, 150, 120, ${0.8 + 0.2 * pulse})`;
+    ctx.fillText("SWARM WAVE", W / 2, H * 0.16 + 32);
+    ctx.font = "13px Share Tech Mono, monospace";
+    ctx.fillStyle = "rgba(232, 210, 190, 0.85)";
+    ctx.fillText("DOUBLE SPAWN  ·  MORTARS + DRONES", W / 2, H * 0.16 + 58);
+    ctx.restore();
   }
 
   function draw() {
@@ -1880,6 +1930,7 @@
     drawLpws();
     drawReticle();
     drawIncomingBanner();
+    drawSwarmBanner();
     drawWaveCompleteBanner();
 
     ctx.fillStyle = "rgba(18, 12, 28, 0.28)";
