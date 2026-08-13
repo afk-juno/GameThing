@@ -44,6 +44,10 @@
     infiniteAmmoTimer: 0,
     maxAmmoNotice: 0,
     turretGlow: 0,
+    waveQuota: 15,
+    spawnedThisWave: 0,
+    waveBreak: false,
+    waveBreakTimer: 0,
   };
 
   // Procedural audio: LPWS warning clip + Vulcan fire (fire sound unchanged)
@@ -404,6 +408,10 @@
   const MAX_BULLET_RANGE = H * 0.7;
   const AIRBURST_AOE = 36;
   const AIRBURST_LIFE = 11;
+  const BASE_SPAWN_MS = 1000;
+  const MIN_SPAWN_MS = 300;
+  const WAVE_BREAK_MS = 3000;
+  const BASE_FALL_SPEED = 1.2;
   const lpws = {
     x: LPWS_HOME.x,
     y: LPWS_HOME.y,
@@ -445,6 +453,26 @@
     },
   };
 
+  function waveEnemyCount(wave) {
+    return 10 + wave * 5;
+  }
+
+  function spawnDelayMs(wave) {
+    return Math.max(MIN_SPAWN_MS, BASE_SPAWN_MS * Math.pow(0.9, wave - 1));
+  }
+
+  function waveSpeedScale(wave) {
+    return Math.pow(1.05, wave - 1);
+  }
+
+  function beginWave() {
+    state.waveQuota = waveEnemyCount(state.wave);
+    state.spawnedThisWave = 0;
+    state.spawnTimer = 0;
+    state.waveBreak = false;
+    state.waveBreakTimer = 0;
+    updateHud();
+  }
   function pickEnemyType() {
     const r = Math.random();
     const w = state.wave;
@@ -459,14 +487,15 @@
     const type = pickEnemyType();
     const spec = ENEMY[type];
     const hp = Math.max(1, 2 + Math.floor(state.wave / 4) + spec.hpBonus);
-    const speed = (1.15 + state.wave * 0.18 + Math.random() * 0.4) * spec.speedMul;
+    const speedScale = waveSpeedScale(state.wave);
+    const speed = (BASE_FALL_SPEED + Math.random() * 0.35) * spec.speedMul * speedScale;
 
     if (type === "drone") {
       const fromLeft = Math.random() < 0.5;
       const x = fromLeft ? -56 : W + 56;
       const y = 72 + Math.random() * 150;
-      const vx = (fromLeft ? 1 : -1) * (1.35 + state.wave * 0.12);
-      const vy = 0.22 + Math.random() * 0.12;
+      const vx = (fromLeft ? 1 : -1) * 1.35 * speedScale;
+      const vy = (0.22 + Math.random() * 0.12) * speedScale;
       state.missiles.push({
         type,
         x,
@@ -528,6 +557,10 @@
     state.lives = 3;
     state.time = 0;
     state.spawnTimer = 0;
+    state.waveQuota = waveEnemyCount(1);
+    state.spawnedThisWave = 0;
+    state.waveBreak = false;
+    state.waveBreakTimer = 0;
     state.shake = 0;
     state.bullets = [];
     state.missiles = [];
@@ -650,7 +683,7 @@
       state.alerting = false;
       state.combatReady = true;
       state.time = 0;
-      state.spawnTimer = 900; // first wave shortly after alert ends
+      beginWave();
     });
   }
 
@@ -979,23 +1012,24 @@
     }
 
     // Hold missiles until "INCOMING" alert finishes
-    if (state.combatReady) {
-      const spawnInterval = Math.max(420, 1400 - state.wave * 90);
-      state.spawnTimer += dt;
-      if (state.spawnTimer >= spawnInterval) {
-        state.spawnTimer = 0;
-        const burst = 1 + Math.floor(state.wave / 3);
-        for (let i = 0; i < burst; i++) {
-          setTimeout(() => {
-            if (state.running && state.combatReady) spawnMissile();
-          }, i * 180);
-        }
-      }
-
-      const nextWaveAt = state.wave * 20000;
-      if (state.time > nextWaveAt) {
+    if (state.combatReady && state.waveBreak) {
+      state.waveBreakTimer += dt;
+      if (state.waveBreakTimer >= WAVE_BREAK_MS) {
         state.wave += 1;
-        updateHud();
+        beginWave();
+      }
+    } else if (state.combatReady) {
+      if (state.spawnedThisWave < state.waveQuota) {
+        const spawnInterval = spawnDelayMs(state.wave);
+        state.spawnTimer += dt;
+        if (state.spawnTimer >= spawnInterval) {
+          state.spawnTimer = 0;
+          spawnMissile();
+          state.spawnedThisWave += 1;
+        }
+      } else if (state.missiles.length === 0) {
+        state.waveBreak = true;
+        state.waveBreakTimer = 0;
       }
     }
 
@@ -1805,6 +1839,28 @@
     ctx.fillText("LPWS ALERT — STAND BY FOR ENGAGEMENT", W / 2, H * 0.28 + 72);
   }
 
+  function drawWaveCompleteBanner() {
+    if (!state.waveBreak) return;
+    const remain = Math.max(0, WAVE_BREAK_MS - state.waveBreakTimer);
+    const secs = Math.ceil(remain / 1000);
+    const pulse = 0.7 + 0.3 * Math.sin(state.waveBreakTimer / 140);
+
+    ctx.fillStyle = `rgba(20, 40, 36, ${0.22 * pulse})`;
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = "900 36px Orbitron, sans-serif";
+    ctx.fillStyle = `rgba(106, 174, 158, ${0.8 + 0.2 * pulse})`;
+    ctx.fillText(`WAVE ${state.wave} COMPLETE`, W / 2, H * 0.3);
+    ctx.font = "700 16px Orbitron, sans-serif";
+    ctx.fillStyle = `rgba(232, 200, 140, ${0.75 + 0.25 * pulse})`;
+    ctx.fillText("RELOAD", W / 2, H * 0.3 + 42);
+    ctx.font = "14px Share Tech Mono, monospace";
+    ctx.fillStyle = "rgba(200, 220, 230, 0.75)";
+    ctx.fillText(`NEXT WAVE IN ${secs}`, W / 2, H * 0.3 + 70);
+  }
+
   function draw() {
     ctx.save();
     if (state.shake > 0.4) {
@@ -1824,6 +1880,7 @@
     drawLpws();
     drawReticle();
     drawIncomingBanner();
+    drawWaveCompleteBanner();
 
     ctx.fillStyle = "rgba(18, 12, 28, 0.28)";
     ctx.fillRect(0, H - 18, W, 18);

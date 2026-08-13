@@ -46,4 +46,4 @@ Destroy missiles and drones before they reach the mount. Destroyed **drones can 
 | Drone | Black UAV, larger | Slides in from the left or right, then weaves as it drops |
 | Fast missile | Magenta dart, slim | High speed, smaller target |
 
-Score climbs with each intercept. Waves get faster and denser.
+Score climbs with each intercept. Waves scale: **10 + (wave × 5)** threats, spawn delay **−10%** per wave (min 0.3s), and speed **+5%** per wave. A 3-second **WAVE COMPLETE** break lets you reload.
