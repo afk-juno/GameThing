@@ -1,6 +1,6 @@
 # LPWS sim
 
-A simple Space Invaders–style shooter where you operate a **Centurion C-RAM / LPWS** (land Phalanx) and stop incoming anti-ship missiles with a dense 20mm tracer stream before they hit the ship.
+A simple Space Invaders–style shooter where you operate an **LPWS** (Land Phalanx Weapon System) and stop incoming anti-ship missiles with a dense 20mm tracer stream before they hit the ship.
 
 ## Play locally
 
@@ -13,7 +13,7 @@ A simple Space Invaders–style shooter where you operate a **Centurion C-RAM / 
 | Input | Action |
 |--------|--------|
 | Mouse / touch | Aim turret |
-| Hold click / touch | Fire continuous tracer stream (with C-RAM fire audio) |
+| Hold click / touch | Fire continuous tracer stream (with LPWS fire audio) |
 | Space | Start / restart |
 
 On **ENGAGE**, the system plays an **INCOMING / INCOMING / INCOMING** alert. Missiles do not approach until that callout finishes.

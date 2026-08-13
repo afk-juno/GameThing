@@ -34,7 +34,7 @@
     alertFlash: 0,
   };
 
-  // Procedural audio: C-RAM warning clip + Vulcan fire (fire sound unchanged)
+  // Procedural audio: LPWS warning clip + Vulcan fire (fire sound unchanged)
   // Prefer assets/incoming.mp3 for pre-missile alert. Optional: assets/fire.mp3
   const AudioFX = (() => {
     let ctx = null;
@@ -379,8 +379,8 @@
     width: 280,
   };
 
-  // Land-style Centurion C-RAM / LPWS mount on the deck
-  const ciws = {
+  // LPWS mount on the deck
+  const lpws = {
     x: W / 2,
     y: H - 88,
     angle: -Math.PI / 2,
@@ -476,8 +476,8 @@
   function setAim(x, y) {
     state.aimX = x;
     state.aimY = y;
-    const dx = x - ciws.x;
-    const dy = y - ciws.y;
+    const dx = x - lpws.x;
+    const dy = y - lpws.y;
     let angle = Math.atan2(dy, dx);
     const min = -Math.PI + 0.15;
     const max = -0.15;
@@ -546,22 +546,22 @@
 
   function muzzlePos(angle) {
     // Pivot is slightly above pedestal; barrels extend along aim angle
-    const pivotY = ciws.y - 4;
-    const len = ciws.barrelLen + 18;
+    const pivotY = lpws.y - 4;
+    const len = lpws.barrelLen + 18;
     return {
-      x: ciws.x + Math.cos(angle) * len,
+      x: lpws.x + Math.cos(angle) * len,
       y: pivotY + Math.sin(angle) * len,
     };
   }
 
   function fire() {
     const now = state.time;
-    if (now - state.lastShot < ciws.fireRate) return;
+    if (now - state.lastShot < lpws.fireRate) return;
     state.lastShot = now;
     state.barrelSpin += 0.55;
 
     const spread = (Math.random() - 0.5) * 0.045;
-    const angle = ciws.angle + spread;
+    const angle = lpws.angle + spread;
     const muzzle = muzzlePos(angle);
     const speed = 18;
 
@@ -600,8 +600,8 @@
     if (Math.random() < 0.35) {
       const eject = angle + Math.PI / 2;
       state.particles.push({
-        x: ciws.x + Math.cos(angle) * 10,
-        y: ciws.y + Math.sin(angle) * 10 + 4,
+        x: lpws.x + Math.cos(angle) * 10,
+        y: lpws.y + Math.sin(angle) * 10 + 4,
         vx: Math.cos(eject) * (1.2 + Math.random()) + (Math.random() - 0.5),
         vy: 1.8 + Math.random() * 1.5,
         life: 28 + Math.random() * 12,
@@ -661,11 +661,11 @@
 
     if (state.combatReady) state.time += dt;
 
-    if (state._targetAngle == null) state._targetAngle = ciws.angle;
-    let diff = state._targetAngle - ciws.angle;
+    if (state._targetAngle == null) state._targetAngle = lpws.angle;
+    let diff = state._targetAngle - lpws.angle;
     while (diff > Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
-    ciws.angle += diff * Math.min(1, 0.18);
+    lpws.angle += diff * Math.min(1, 0.18);
 
     if (state.fireHeld) fire();
     else state.barrelSpin *= 0.92;
@@ -802,7 +802,7 @@
     ctx.fillStyle = "#8a9aaa";
     ctx.fillRect(x - half + 40, y - 22, half * 2 - 80, 10);
 
-    // Superstructure shifted left so C-RAM reads clearly center-deck
+    // Superstructure shifted left so LPWS reads clearly center-deck
     ctx.fillStyle = "#9aabba";
     ctx.fillRect(x - 120, y - 55, 70, 35);
     ctx.fillStyle = "#7d8e9d";
@@ -820,8 +820,8 @@
     ctx.fillRect(x - 73, y - 108, 6, 4);
   }
 
-  function drawCiws() {
-    const { x, y, angle, barrelLen } = ciws;
+  function drawLpws() {
+    const { x, y, angle, barrelLen } = lpws;
     const tanMid = "#9a7348";
 
     // Tan armored pedestal (fixed, world space)
@@ -1153,7 +1153,7 @@
     ctx.fillText("INCOMING  ·  INCOMING  ·  INCOMING", W / 2, H * 0.28 + 40);
     ctx.font = "14px Share Tech Mono, monospace";
     ctx.fillStyle = "rgba(200, 220, 230, 0.75)";
-    ctx.fillText("C-RAM ALERT — STAND BY FOR ENGAGEMENT", W / 2, H * 0.28 + 72);
+    ctx.fillText("LPWS ALERT — STAND BY FOR ENGAGEMENT", W / 2, H * 0.28 + 72);
   }
 
   function draw() {
@@ -1170,7 +1170,7 @@
     drawMissiles();
     drawBullets();
     drawParticles();
-    drawCiws();
+    drawLpws();
     drawReticle();
     drawIncomingBanner();
 
@@ -1186,7 +1186,7 @@
     last = now;
     if (state.running) update(dt);
     else {
-      ciws.angle = -Math.PI / 2 + Math.sin(now / 900) * 0.25;
+      lpws.angle = -Math.PI / 2 + Math.sin(now / 900) * 0.25;
     }
     draw();
     requestAnimationFrame(loop);
