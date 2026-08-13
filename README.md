@@ -1,17 +1,18 @@
 # LPWS sim
 
-A simple Space Invaders–style shooter where you operate an **LPWS** (Land Phalanx Weapon System) and stop incoming anti-ship missiles with a dense 20mm tracer stream before they hit the ship.
+A simple Space Invaders–style shooter where you operate an **LPWS** (Land Phalanx Weapon System) on a fixed mount and stop incoming missiles with a dense 20mm tracer stream before they hit the emplacement.
 
 ## Play locally
 
 1. Open `index.html` in a browser (Chrome, Edge, or Firefox).
 2. Click **ENGAGE** (or press Space).
-3. Move the mouse / finger to aim. Hold click / touch to fire.
+3. Move the gun with WASD or arrow keys. Aim with the mouse / finger. Hold click / touch to fire.
 
 ## Controls
 
 | Input | Action |
 |--------|--------|
+| WASD / arrow keys | Move the LPWS up, down, left, and right |
 | Mouse / touch | Aim turret |
 | Hold click / touch | Fire continuous tracer stream (with LPWS fire audio) |
 | Space | Start / restart |
@@ -36,4 +37,4 @@ Upload the folder to [Netlify Drop](https://app.netlify.com/drop) for a shareabl
 
 ## Goal
 
-Destroy missiles before they reach the ship. You have **3 hull hits**. Waves get faster and denser. Score climbs with each intercept.
+Destroy missiles before they reach the mount. You have **3 mount hits**. Waves get faster and denser. Score climbs with each intercept.

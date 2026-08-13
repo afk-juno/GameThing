@@ -373,20 +373,22 @@
     };
   })();
 
-  const ship = {
+  const mount = {
     x: W / 2,
-    deckY: H - 70,
-    width: 280,
+    y: H - 58,
+    width: 300,
   };
 
-  // LPWS mount on the deck
+  const LPWS_HOME = { x: W / 2, y: H - 90 };
   const lpws = {
-    x: W / 2,
-    y: H - 88,
+    x: LPWS_HOME.x,
+    y: LPWS_HOME.y,
     angle: -Math.PI / 2,
     barrelLen: 52,
     fireRate: 14, // ~4300 rpm continuous stream
   };
+
+  const keys = new Set();
 
   const MISSILE_HIT_R = 28;
   const MISSILE_SCALE = 1.75;
@@ -407,6 +409,10 @@
     state.alerting = false;
     state.combatReady = false;
     state.alertFlash = 0;
+    lpws.x = LPWS_HOME.x;
+    lpws.y = LPWS_HOME.y;
+    lpws.angle = -Math.PI / 2;
+    keys.clear();
     AudioFX.setFiring(false);
     updateHud();
   }
@@ -457,8 +463,8 @@
     state.combatReady = false;
     AudioFX.hushAll();
     showOverlay(
-      "SHIP HIT — MISSION FAILED",
-      `Missiles penetrated the inner defense zone.<br />Final score: <strong style="color:#e8a83a">${state.score}</strong> · Wave ${state.wave}`,
+      "MOUNT HIT — MISSION FAILED",
+      `Missiles struck the emplacement.<br />Final score: <strong style="color:#c989a8">${state.score}</strong> · Wave ${state.wave}`,
       "RE-ENGAGE"
     );
   }
@@ -510,12 +516,36 @@
 
   startBtn.addEventListener("click", startGame);
 
+  function isMoveKey(code) {
+    return (
+      code === "KeyW" ||
+      code === "KeyA" ||
+      code === "KeyS" ||
+      code === "KeyD" ||
+      code === "ArrowUp" ||
+      code === "ArrowDown" ||
+      code === "ArrowLeft" ||
+      code === "ArrowRight"
+    );
+  }
+
   window.addEventListener("keydown", (e) => {
     if (e.code === "Space") {
       e.preventDefault();
       if (!state.running) startGame();
+      return;
+    }
+    if (isMoveKey(e.code)) {
+      e.preventDefault();
+      keys.add(e.code);
     }
   });
+
+  window.addEventListener("keyup", (e) => {
+    keys.delete(e.code);
+  });
+
+  window.addEventListener("blur", () => keys.clear());
 
   function spawnMissile() {
     const sideBias = Math.random();
@@ -526,9 +556,9 @@
           ? W - Math.random() * 80
           : 40 + Math.random() * (W - 80);
     const speed = 1.15 + state.wave * 0.18 + Math.random() * 0.4;
-    const targetX = ship.x + (Math.random() - 0.5) * ship.width * 0.7;
+    const targetX = mount.x + (Math.random() - 0.5) * mount.width * 0.7;
     const dx = targetX - x;
-    const dy = ship.deckY - 20;
+    const dy = mount.y - 20;
     const dist = Math.hypot(dx, dy) || 1;
     // Dense tracer stream: missiles need a short burst to kill
     const hp = 2 + Math.floor(state.wave / 4);
@@ -648,7 +678,7 @@
     const idx = state.missiles.indexOf(m);
     if (idx >= 0) state.missiles.splice(idx, 1);
     explode(m.x, m.y, "#ff5a3a", 36);
-    explode(m.x, ship.deckY - 10, "#ffaa55", 20);
+    explode(m.x, mount.y - 10, "#ffaa55", 20);
     state.shake = 14;
     state.lives -= 1;
     AudioFX.playDamage();
@@ -660,6 +690,22 @@
     if (state.alerting) state.alertFlash += dt;
 
     if (state.combatReady) state.time += dt;
+
+    let mx = 0;
+    let my = 0;
+    if (keys.has("KeyA") || keys.has("ArrowLeft")) mx -= 1;
+    if (keys.has("KeyD") || keys.has("ArrowRight")) mx += 1;
+    if (keys.has("KeyW") || keys.has("ArrowUp")) my -= 1;
+    if (keys.has("KeyS") || keys.has("ArrowDown")) my += 1;
+    if (mx || my) {
+      const len = Math.hypot(mx, my) || 1;
+      const speed = 0.32 * dt;
+      lpws.x += (mx / len) * speed;
+      lpws.y += (my / len) * speed;
+      lpws.x = Math.max(80, Math.min(W - 80, lpws.x));
+      lpws.y = Math.max(130, Math.min(H - 82, lpws.y));
+    }
+    setAim(state.aimX, state.aimY);
 
     if (state._targetAngle == null) state._targetAngle = lpws.angle;
     let diff = state._targetAngle - lpws.angle;
@@ -709,7 +755,10 @@
       m.y += m.vy;
       m.angle = Math.atan2(m.vy, m.vx);
 
-      if (m.y >= ship.deckY - 8 && Math.abs(m.x - ship.x) < ship.width / 2 + 10) {
+      const hitMount =
+        m.y >= mount.y - 8 && Math.abs(m.x - mount.x) < mount.width / 2 + 10;
+      const hitGun = Math.hypot(m.x - lpws.x, m.y - lpws.y) < 36;
+      if (hitMount || hitGun) {
         missileImpact(m);
         continue;
       }
@@ -753,71 +802,127 @@
     if (state.shake > 0) state.shake *= 0.88;
   }
 
-  function drawSea() {
+  function drawBackdrop() {
     const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, "#0a1824");
-    g.addColorStop(0.5, "#0c2233");
-    g.addColorStop(0.78, "#1a2a28");
-    g.addColorStop(1, "#2a3224");
+    g.addColorStop(0, "#1a1630");
+    g.addColorStop(0.3, "#2c2242");
+    g.addColorStop(0.54, "#5a3d58");
+    g.addColorStop(0.62, "#6a4a62");
+    g.addColorStop(0.63, "#3a3558");
+    g.addColorStop(1, "#1c1832");
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
 
-    const haze = ctx.createLinearGradient(0, 0, 0, 140);
-    haze.addColorStop(0, "rgba(120,160,190,0.12)");
-    haze.addColorStop(1, "rgba(120,160,190,0)");
-    ctx.fillStyle = haze;
-    ctx.fillRect(0, 0, W, 140);
+    const sunX = W * 0.72;
+    const sunY = H * 0.28;
+    const sunGlow = ctx.createRadialGradient(sunX, sunY, 8, sunX, sunY, 96);
+    sunGlow.addColorStop(0, "rgba(232, 170, 170, 0.5)");
+    sunGlow.addColorStop(0.4, "rgba(196, 122, 150, 0.18)");
+    sunGlow.addColorStop(1, "rgba(196, 122, 150, 0)");
+    ctx.fillStyle = sunGlow;
+    ctx.beginPath();
+    ctx.arc(sunX, sunY, 96, 0, Math.PI * 2);
+    ctx.fill();
 
-    ctx.fillStyle = "rgba(255,255,255,0.015)";
+    ctx.fillStyle = "rgba(220, 164, 168, 0.42)";
+    ctx.beginPath();
+    ctx.arc(sunX, sunY, 26, 0, Math.PI * 2);
+    ctx.fill();
+
+    const cx = W * 0.26;
+    const cy = H * 0.2;
+    const cyanGlow = ctx.createRadialGradient(cx, cy, 4, cx, cy, 72);
+    cyanGlow.addColorStop(0, "rgba(120, 176, 186, 0.2)");
+    cyanGlow.addColorStop(1, "rgba(120, 176, 186, 0)");
+    ctx.fillStyle = cyanGlow;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 72, 0, Math.PI * 2);
+    ctx.fill();
+
+    const horizon = H * 0.62;
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(180, 110, 150, 0.22)";
+    for (let i = 1; i <= 14; i++) {
+      const t = i / 14;
+      const y = horizon + Math.pow(t, 1.65) * (H - horizon);
+      ctx.globalAlpha = 0.12 + t * 0.2;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(W, y);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = "rgba(130, 168, 180, 0.16)";
+    const rays = 18;
+    for (let i = 0; i <= rays; i++) {
+      const x = (i / rays) * W;
+      ctx.beginPath();
+      ctx.moveTo(W / 2, horizon);
+      ctx.lineTo(x, H);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = "rgba(255,255,255,0.012)";
     for (let y = 0; y < H; y += 3) {
       ctx.fillRect(0, y, W, 1);
     }
   }
 
-  function drawShip() {
-    const y = ship.deckY;
-    const x = ship.x;
-    const half = ship.width / 2;
+  function drawMount() {
+    const x = mount.x;
+    const y = mount.y;
+    const half = mount.width / 2;
 
-    ctx.fillStyle = "rgba(0,0,0,0.35)";
+    ctx.fillStyle = "rgba(10, 8, 18, 0.45)";
     ctx.beginPath();
-    ctx.ellipse(x, H - 28, half + 30, 18, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, H - 22, half + 18, 16, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    const hull = ctx.createLinearGradient(0, y - 20, 0, H);
-    hull.addColorStop(0, "#6d7f8f");
-    hull.addColorStop(0.4, "#4a5a68");
-    hull.addColorStop(1, "#2a3540");
-    ctx.fillStyle = hull;
+    const slab = ctx.createLinearGradient(0, y - 10, 0, H);
+    slab.addColorStop(0, "#6a6278");
+    slab.addColorStop(0.4, "#4a445c");
+    slab.addColorStop(1, "#2e2a3c");
+    ctx.fillStyle = slab;
     ctx.beginPath();
-    ctx.moveTo(x - half - 20, y + 10);
-    ctx.lineTo(x - half + 30, y - 18);
-    ctx.lineTo(x + half - 30, y - 18);
-    ctx.lineTo(x + half + 20, y + 10);
-    ctx.lineTo(x + half - 10, H - 18);
-    ctx.lineTo(x - half + 10, H - 18);
+    ctx.moveTo(x - half - 6, y + 8);
+    ctx.lineTo(x - half + 20, y - 12);
+    ctx.lineTo(x + half - 20, y - 12);
+    ctx.lineTo(x + half + 6, y + 8);
+    ctx.lineTo(x + half - 14, H - 16);
+    ctx.lineTo(x - half + 14, H - 16);
     ctx.closePath();
     ctx.fill();
 
-    ctx.fillStyle = "#8a9aaa";
-    ctx.fillRect(x - half + 40, y - 22, half * 2 - 80, 10);
-
-    // Superstructure shifted left so LPWS reads clearly center-deck
-    ctx.fillStyle = "#9aabba";
-    ctx.fillRect(x - 120, y - 55, 70, 35);
-    ctx.fillStyle = "#7d8e9d";
-    ctx.fillRect(x - 100, y - 72, 40, 20);
-    ctx.fillStyle = "#c5d0da";
-    ctx.fillRect(x - 92, y - 66, 24, 10);
-
-    ctx.strokeStyle = "#b8c4ce";
+    ctx.strokeStyle = "#8a8498";
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.ellipse(x, y - 2, 78, 20, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = "#5a5468";
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(x - 70, y - 72);
-    ctx.lineTo(x - 70, y - 105);
+    ctx.ellipse(x, y - 2, 62, 14, 0, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.fillStyle = "#e8a83a";
-    ctx.fillRect(x - 73, y - 108, 6, 4);
+
+    ctx.fillStyle = "#c4b8a0";
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.arc(x + Math.cos(a) * 78, y - 2 + Math.sin(a) * 20, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.fillStyle = "#3a3648";
+    ctx.beginPath();
+    ctx.ellipse(x, y - 2, 48, 11, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#524c62";
+    ctx.fillRect(x - half + 22, y - 6, 34, 16);
+    ctx.fillRect(x + half - 56, y - 6, 34, 16);
+    ctx.fillStyle = "#7a90a0";
+    ctx.fillRect(x - half + 28, y - 2, 10, 6);
+    ctx.fillRect(x + half - 42, y - 2, 10, 6);
   }
 
   function drawLpws() {
@@ -1120,7 +1225,7 @@
     if (!state.running) return;
     const x = state.aimX;
     const y = state.aimY;
-    ctx.strokeStyle = "rgba(232, 168, 58, 0.55)";
+    ctx.strokeStyle = "rgba(201, 137, 168, 0.55)";
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.arc(x, y, 14, 0, Math.PI * 2);
@@ -1165,8 +1270,8 @@
       );
     }
 
-    drawSea();
-    drawShip();
+    drawBackdrop();
+    drawMount();
     drawMissiles();
     drawBullets();
     drawParticles();
@@ -1174,7 +1279,7 @@
     drawReticle();
     drawIncomingBanner();
 
-    ctx.fillStyle = "rgba(140, 190, 220, 0.06)";
+    ctx.fillStyle = "rgba(40, 24, 50, 0.22)";
     ctx.fillRect(0, H - 40, W, 40);
 
     ctx.restore();
@@ -1186,6 +1291,8 @@
     last = now;
     if (state.running) update(dt);
     else {
+      lpws.x = LPWS_HOME.x;
+      lpws.y = LPWS_HOME.y;
       lpws.angle = -Math.PI / 2 + Math.sin(now / 900) * 0.25;
     }
     draw();

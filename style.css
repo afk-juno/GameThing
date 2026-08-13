@@ -1,14 +1,14 @@
 :root {
-  --bg-deep: #0a1218;
-  --bg-sea: #0d1f2d;
-  --panel: #132333;
-  --steel: #8fa3b5;
-  --amber: #e8a83a;
-  --alert: #e85a3a;
-  --ok: #3ecf8e;
-  --fog: rgba(180, 210, 230, 0.08);
-  --text: #d6e4ef;
-  --muted: #7a93a8;
+  --bg-deep: #161225;
+  --bg-dusk: #241c34;
+  --panel: #2a2238;
+  --steel: #9a8fb0;
+  --amber: #c989a8;
+  --alert: #c45a6a;
+  --ok: #6aae9e;
+  --fog: rgba(180, 150, 190, 0.08);
+  --text: #e0d6e6;
+  --muted: #8a7a98;
 }
 
 * {
@@ -22,8 +22,9 @@ body {
   height: 100%;
   overflow: hidden;
   background:
-    radial-gradient(ellipse 120% 80% at 50% 0%, #163048 0%, transparent 55%),
-    linear-gradient(180deg, var(--bg-deep) 0%, var(--bg-sea) 100%);
+    radial-gradient(ellipse 90% 70% at 72% 8%, rgba(196, 122, 150, 0.22) 0%, transparent 52%),
+    radial-gradient(ellipse 70% 50% at 22% 12%, rgba(90, 150, 160, 0.16) 0%, transparent 48%),
+    linear-gradient(180deg, var(--bg-deep) 0%, var(--bg-dusk) 100%);
   color: var(--text);
   font-family: "Share Tech Mono", ui-monospace, monospace;
 }
@@ -103,11 +104,11 @@ h1 {
   width: 18px;
   height: 8px;
   background: var(--ok);
-  box-shadow: 0 0 8px rgba(62, 207, 142, 0.45);
+  box-shadow: 0 0 8px rgba(106, 174, 158, 0.4);
 }
 
 .lives .pip.lost {
-  background: #2a3a48;
+  background: #3a3048;
   box-shadow: none;
 }
 
@@ -115,11 +116,11 @@ h1 {
   width: min(900px, 100%);
   height: auto;
   aspect-ratio: 900 / 600;
-  background: #071018;
-  border: 1px solid rgba(143, 163, 181, 0.35);
+  background: #161225;
+  border: 1px solid rgba(154, 143, 176, 0.35);
   box-shadow:
     0 0 0 1px rgba(0, 0, 0, 0.5),
-    0 20px 60px rgba(0, 0, 0, 0.45);
+    0 20px 60px rgba(18, 10, 28, 0.55);
   cursor: crosshair;
   display: block;
   touch-action: none;
@@ -131,7 +132,7 @@ h1 {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(5, 10, 16, 0.72);
+  background: rgba(16, 10, 24, 0.74);
   backdrop-filter: blur(4px);
   z-index: 10;
   transition: opacity 0.25s ease;
@@ -146,8 +147,8 @@ h1 {
   width: min(420px, calc(100% - 2rem));
   padding: 2rem 1.75rem;
   background:
-    linear-gradient(160deg, rgba(30, 48, 64, 0.95), rgba(14, 24, 34, 0.98));
-  border: 1px solid rgba(143, 163, 181, 0.4);
+    linear-gradient(160deg, rgba(52, 40, 68, 0.95), rgba(24, 18, 36, 0.98));
+  border: 1px solid rgba(154, 143, 176, 0.4);
   text-align: center;
 }
 
@@ -180,7 +181,7 @@ h1 {
   font-size: 0.85rem;
   padding: 0.85rem 1.75rem;
   border: 1px solid var(--amber);
-  background: rgba(232, 168, 58, 0.12);
+  background: rgba(201, 137, 168, 0.12);
   color: var(--amber);
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
@@ -189,7 +190,7 @@ h1 {
 #start-btn:hover,
 #start-btn:focus-visible {
   background: var(--amber);
-  color: #111;
+  color: #1a1220;
   outline: none;
 }
 
