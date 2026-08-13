@@ -6,6 +6,7 @@
   const livesEl = document.getElementById("lives");
   const ammoEl = document.getElementById("ammo");
   const reloadStatusEl = document.getElementById("reload-status");
+  const maxAmmoNoticeEl = document.getElementById("max-ammo-notice");
   const overlay = document.getElementById("overlay");
   const overlayTitle = document.getElementById("overlay-title");
   const overlayText = document.getElementById("overlay-text");
@@ -28,6 +29,7 @@
     shake: 0,
     bullets: [],
     missiles: [],
+    crates: [],
     particles: [],
     flashes: [],
     barrelSpin: 0,
@@ -37,6 +39,10 @@
     ammo: 300,
     reloading: false,
     reloadTimer: 0,
+    infiniteAmmo: false,
+    infiniteAmmoTimer: 0,
+    maxAmmoNotice: 0,
+    turretGlow: 0,
   };
 
   // Procedural audio: LPWS warning clip + Vulcan fire (fire sound unchanged)
@@ -391,6 +397,8 @@
   const AIM_MAX = -0.15;
   const MAX_AMMO = 300;
   const RELOAD_MS = 3000;
+  const INFINITE_AMMO_MS = 5000;
+  const CRATE_HIT_R = 24;
   const lpws = {
     x: LPWS_HOME.x,
     y: LPWS_HOME.y,
@@ -518,6 +526,7 @@
     state.shake = 0;
     state.bullets = [];
     state.missiles = [];
+    state.crates = [];
     state.particles = [];
     state.flashes = [];
     state.lastShot = 0;
@@ -532,6 +541,10 @@
     state.ammo = MAX_AMMO;
     state.reloading = false;
     state.reloadTimer = 0;
+    state.infiniteAmmo = false;
+    state.infiniteAmmoTimer = 0;
+    state.maxAmmoNotice = 0;
+    state.turretGlow = 0;
     keys.clear();
     AudioFX.setFiring(false);
     updateHud();
@@ -550,22 +563,60 @@
   }
 
   function updateAmmoHud() {
-    ammoEl.textContent = `${state.ammo} / ${MAX_AMMO}`;
-    ammoEl.classList.toggle("low", state.ammo <= 40 && !state.reloading);
-    reloadStatusEl.hidden = !state.reloading;
+    if (state.infiniteAmmo) {
+      ammoEl.textContent = `MAX / ${MAX_AMMO}`;
+      ammoEl.classList.add("maxed");
+      ammoEl.classList.remove("low");
+      reloadStatusEl.hidden = true;
+    } else {
+      ammoEl.textContent = `${state.ammo} / ${MAX_AMMO}`;
+      ammoEl.classList.toggle("low", state.ammo <= 40 && !state.reloading);
+      ammoEl.classList.remove("maxed");
+      reloadStatusEl.hidden = !state.reloading;
+    }
+    maxAmmoNoticeEl.hidden = state.maxAmmoNotice <= 0;
   }
 
   function canFire() {
-    return state.running && !state.reloading && state.ammo > 0;
+    if (!state.running) return false;
+    if (state.infiniteAmmo) return true;
+    return !state.reloading && state.ammo > 0;
   }
 
   function requestReload() {
-    if (!state.running || state.reloading) return;
+    if (!state.running || state.reloading || state.infiniteAmmo) return;
     if (state.ammo >= MAX_AMMO) return;
     state.reloading = true;
     state.reloadTimer = 0;
     AudioFX.setFiring(false);
     updateAmmoHud();
+  }
+
+  function spawnAmmoCrate(x, y) {
+    state.crates.push({
+      x,
+      y,
+      vx: (Math.random() - 0.5) * 1.1,
+      vy: -0.6 - Math.random() * 0.5,
+      rot: (Math.random() - 0.5) * 0.4,
+      spin: (Math.random() - 0.5) * 0.08,
+    });
+  }
+
+  function collectCrate(i) {
+    const c = state.crates[i];
+    explode(c.x, c.y, "#e8c84a", 18);
+    explode(c.x, c.y, "#6aae9e", 10);
+    state.crates.splice(i, 1);
+    state.reloading = false;
+    state.reloadTimer = 0;
+    state.ammo = MAX_AMMO;
+    state.infiniteAmmo = true;
+    state.infiniteAmmoTimer = INFINITE_AMMO_MS;
+    state.maxAmmoNotice = 2200;
+    state.turretGlow = INFINITE_AMMO_MS;
+    updateAmmoHud();
+    if (state.fireHeld) AudioFX.setFiring(true);
   }
 
   function showOverlay(title, text, buttonLabel) {
@@ -709,9 +760,11 @@
     if (now - state.lastShot < lpws.fireRate) return;
     state.lastShot = now;
     state.barrelSpin += 0.55;
-    state.ammo -= 1;
-    updateAmmoHud();
-    if (state.ammo <= 0) requestReload();
+    if (!state.infiniteAmmo) {
+      state.ammo -= 1;
+      updateAmmoHud();
+      if (state.ammo <= 0) requestReload();
+    }
 
     const spread = (Math.random() - 0.5) * 0.045;
     const angle = lpws.angle + spread;
@@ -792,6 +845,7 @@
       const [cr, cg, cb] = m.trailRgb || [255, 138, 74];
       explode(m.x, m.y, `rgb(${cr},${cg},${cb})`, 28);
       explode(m.x, m.y, "#ffe08a", 14);
+      if (m.type === "drone") spawnAmmoCrate(m.x, m.y);
       state.shake = Math.min(8, state.shake + 2);
       AudioFX.playIntercept();
       updateHud();
@@ -847,7 +901,26 @@
     while (azDiff < -Math.PI) azDiff += Math.PI * 2;
     lpws.azimuth += azDiff * Math.min(1, 0.16);
 
-    if (state.reloading) {
+    if (state.infiniteAmmo) {
+      state.infiniteAmmoTimer -= dt;
+      if (state.infiniteAmmoTimer <= 0) {
+        state.infiniteAmmo = false;
+        state.infiniteAmmoTimer = 0;
+        state.ammo = MAX_AMMO;
+        state.turretGlow = 0;
+        updateAmmoHud();
+      }
+    }
+    if (state.maxAmmoNotice > 0) {
+      state.maxAmmoNotice -= dt;
+      if (state.maxAmmoNotice <= 0) {
+        state.maxAmmoNotice = 0;
+        updateAmmoHud();
+      }
+    }
+    if (state.turretGlow > 0) state.turretGlow = Math.max(0, state.turretGlow - dt);
+
+    if (state.reloading && !state.infiniteAmmo) {
       state.reloadTimer += dt;
       if (state.reloadTimer >= RELOAD_MS) {
         state.reloading = false;
@@ -927,8 +1000,44 @@
       }
     }
 
+    for (let i = state.crates.length - 1; i >= 0; i--) {
+      const c = state.crates[i];
+      c.vy += 0.085;
+      c.x += c.vx;
+      c.y += c.vy;
+      c.rot += c.spin;
+      c.vx *= 0.992;
+
+      const deckY = mount.y - 6;
+      if (c.y >= deckY && Math.abs(c.x - mount.x) < mount.width / 2 + 8) {
+        c.y = deckY;
+        c.vy = 0;
+        c.vx *= 0.82;
+        c.spin *= 0.85;
+      }
+
+      if (Math.hypot(c.x - lpws.x, c.y - lpws.y) < 80) {
+        collectCrate(i);
+        continue;
+      }
+      if (c.y > H + 36) state.crates.splice(i, 1);
+    }
+
     for (let bi = state.bullets.length - 1; bi >= 0; bi--) {
       const b = state.bullets[bi];
+      let hit = false;
+      for (let ci = 0; ci < state.crates.length; ci++) {
+        const c = state.crates[ci];
+        const dx = b.x - c.x;
+        const dy = b.y - c.y;
+        if (dx * dx + dy * dy < CRATE_HIT_R * CRATE_HIT_R) {
+          state.bullets.splice(bi, 1);
+          collectCrate(ci);
+          hit = true;
+          break;
+        }
+      }
+      if (hit) continue;
       for (let mi = 0; mi < state.missiles.length; mi++) {
         const m = state.missiles[mi];
         const r = m.hitR || MISSILE_HIT_R;
@@ -1129,6 +1238,18 @@
     const tanMid = "#9a7348";
     const hw = 86;
 
+    if (state.turretGlow > 0) {
+      const pulse = 0.5 + 0.4 * Math.sin((state.time || performance.now()) / 90);
+      const glow = ctx.createRadialGradient(x, y, 8, x, y, 110);
+      glow.addColorStop(0, `rgba(232, 210, 90, ${0.42 * pulse})`);
+      glow.addColorStop(0.4, `rgba(106, 174, 158, ${0.22 * pulse})`);
+      glow.addColorStop(1, "rgba(232, 210, 90, 0)");
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(x, y, 110, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     ctx.fillStyle = "rgba(0,0,0,0.35)";
     ctx.beginPath();
     ctx.ellipse(x, y + 38, hw + 6, 12, 0, 0, Math.PI * 2);
@@ -1297,6 +1418,39 @@
       ctx.beginPath();
       ctx.arc(3, 0, 7 + (5 - f.life), 0, Math.PI * 2);
       ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  function drawCrates() {
+    for (const c of state.crates) {
+      ctx.save();
+      ctx.translate(c.x, c.y);
+      ctx.rotate(c.rot);
+
+      ctx.fillStyle = "rgba(0,0,0,0.28)";
+      ctx.beginPath();
+      ctx.ellipse(0, 12, 16, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#c4a24a";
+      ctx.fillRect(-14, -10, 28, 20);
+      ctx.fillStyle = "#8a6a28";
+      ctx.fillRect(-14, -10, 28, 4);
+      ctx.fillRect(-14, 6, 28, 4);
+      ctx.fillStyle = "#e8d080";
+      ctx.fillRect(-14, -1, 28, 3);
+
+      ctx.strokeStyle = "#3a2a10";
+      ctx.lineWidth = 1.4;
+      ctx.strokeRect(-14, -10, 28, 20);
+
+      ctx.fillStyle = "#2a1a08";
+      ctx.font = "bold 7px Share Tech Mono, monospace";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("AMMO", 0, 1);
+
       ctx.restore();
     }
   }
@@ -1590,6 +1744,7 @@
     drawBackdrop();
     drawMount();
     drawMissiles();
+    drawCrates();
     drawBullets();
     drawParticles();
     drawLpws();

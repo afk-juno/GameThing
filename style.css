@@ -86,8 +86,22 @@ body {
   font-size: 1.15rem;
 }
 
-.ammo-count.low {
-  color: var(--alert);
+.ammo-count.maxed {
+  color: var(--ok);
+}
+
+.max-ammo-notice {
+  font-family: Orbitron, sans-serif;
+  font-weight: 700;
+  font-size: 0.78rem;
+  letter-spacing: 0.16em;
+  color: var(--ok);
+  text-shadow: 0 0 10px rgba(106, 174, 158, 0.55);
+  animation: reload-pulse 0.45s ease-in-out infinite;
+}
+
+.max-ammo-notice[hidden] {
+  display: none;
 }
 
 .reload-status {

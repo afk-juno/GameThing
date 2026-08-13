@@ -38,7 +38,7 @@ Upload the folder to [Netlify Drop](https://app.netlify.com/drop) for a shareabl
 
 ## Goal
 
-Destroy missiles and drones before they reach the mount. You have **3 mount hits**. Waves mix three threats:
+Destroy missiles and drones before they reach the mount. Destroyed **drones drop ammo crates**. Shoot or collect a crate to refill to max and gain **5 seconds of infinite ammo**.
 
 | Type | Look | Behavior |
 |------|------|----------|
