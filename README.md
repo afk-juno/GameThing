@@ -1,4 +1,4 @@
-# PHALANX C-RAM — Missile Defense
+# LPWS sim
 
 A simple Space Invaders–style shooter where you operate a **Centurion C-RAM / LPWS** (land Phalanx) and stop incoming anti-ship missiles with a dense 20mm tracer stream before they hit the ship.
 
