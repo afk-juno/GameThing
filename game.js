@@ -375,16 +375,18 @@
 
   const mount = {
     x: W / 2,
-    y: H - 58,
-    width: 300,
+    y: H - 72,
+    width: 760,
+    thick: 28,
   };
 
-  const LPWS_HOME = { x: W / 2, y: H - 90 };
+  const TURRET_SCALE = 1.55;
+  const LPWS_HOME = { x: W / 2, y: H - 112 };
   const lpws = {
     x: LPWS_HOME.x,
     y: LPWS_HOME.y,
     angle: -Math.PI / 2,
-    barrelLen: 52,
+    barrelLen: 58,
     fireRate: 14, // ~4300 rpm continuous stream
   };
 
@@ -575,9 +577,8 @@
   }
 
   function muzzlePos(angle) {
-    // Pivot is slightly above pedestal; barrels extend along aim angle
-    const pivotY = lpws.y - 4;
-    const len = lpws.barrelLen + 18;
+    const pivotY = lpws.y - 6;
+    const len = (lpws.barrelLen + 16) * TURRET_SCALE;
     return {
       x: lpws.x + Math.cos(angle) * len,
       y: pivotY + Math.sin(angle) * len,
@@ -702,8 +703,8 @@
       const speed = 0.32 * dt;
       lpws.x += (mx / len) * speed;
       lpws.y += (my / len) * speed;
-      lpws.x = Math.max(80, Math.min(W - 80, lpws.x));
-      lpws.y = Math.max(130, Math.min(H - 82, lpws.y));
+      lpws.x = Math.max(90, Math.min(W - 90, lpws.x));
+      lpws.y = Math.max(130, Math.min(mount.y - 36, lpws.y));
     }
     setAim(state.aimX, state.aimY);
 
@@ -757,7 +758,7 @@
 
       const hitMount =
         m.y >= mount.y - 8 && Math.abs(m.x - mount.x) < mount.width / 2 + 10;
-      const hitGun = Math.hypot(m.x - lpws.x, m.y - lpws.y) < 36;
+      const hitGun = Math.hypot(m.x - lpws.x, m.y - lpws.y) < 52;
       if (hitMount || hitGun) {
         missileImpact(m);
         continue;
@@ -872,113 +873,135 @@
     const x = mount.x;
     const y = mount.y;
     const half = mount.width / 2;
+    const thick = mount.thick;
 
-    ctx.fillStyle = "rgba(10, 8, 18, 0.45)";
+    ctx.fillStyle = "rgba(8, 6, 16, 0.5)";
     ctx.beginPath();
-    ctx.ellipse(x, H - 22, half + 18, 16, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, H - 10, half + 8, 9, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    const slab = ctx.createLinearGradient(0, y - 10, 0, H);
-    slab.addColorStop(0, "#6a6278");
-    slab.addColorStop(0.4, "#4a445c");
-    slab.addColorStop(1, "#2e2a3c");
-    ctx.fillStyle = slab;
+    const pads = [-half + 40, -half * 0.38, half * 0.38, half - 40];
+    for (const px of pads) {
+      ctx.fillStyle = "#322c40";
+      ctx.fillRect(x + px - 7, y + thick, 14, H - y - thick - 12);
+      ctx.fillStyle = "#4a4458";
+      ctx.fillRect(x + px - 18, H - 22, 36, 10);
+      ctx.fillStyle = "#6a6478";
+      ctx.fillRect(x + px - 16, H - 22, 32, 3);
+    }
+
+    ctx.fillStyle = "#2a2636";
+    ctx.fillRect(x - half - 10, y + thick, half * 2 + 20, 10);
+
+    const deck = ctx.createLinearGradient(0, y - 14, 0, y + thick);
+    deck.addColorStop(0, "#7a748c");
+    deck.addColorStop(0.4, "#5c566c");
+    deck.addColorStop(1, "#3c364c");
+    ctx.fillStyle = deck;
     ctx.beginPath();
-    ctx.moveTo(x - half - 6, y + 8);
-    ctx.lineTo(x - half + 20, y - 12);
-    ctx.lineTo(x + half - 20, y - 12);
-    ctx.lineTo(x + half + 6, y + 8);
-    ctx.lineTo(x + half - 14, H - 16);
-    ctx.lineTo(x - half + 14, H - 16);
-    ctx.closePath();
+    ctx.rect(x - half, y - 10, half * 2, thick + 10);
     ctx.fill();
 
-    ctx.strokeStyle = "#8a8498";
-    ctx.lineWidth = 5;
+    ctx.fillStyle = "#8a8498";
+    ctx.fillRect(x - half, y - 10, half * 2, 4);
+    ctx.fillStyle = "#2e2a3c";
+    ctx.fillRect(x - half, y + thick - 3, half * 2, 3);
+
+    ctx.fillStyle = "rgba(40, 34, 52, 0.45)";
+    for (let i = 0; i < 18; i++) {
+      ctx.fillRect(x - half + 12 + i * 42, y - 4, 28, 2);
+    }
+
+    ctx.fillStyle = "#262232";
+    ctx.fillRect(x - half + 50, y + 2, half * 2 - 100, 10);
+    ctx.fillStyle = "#6a90a0";
+    ctx.fillRect(x - half + 50, y + 5, half * 2 - 100, 2);
+
+    const stripeW = 18;
+    for (let i = 0; i < Math.floor((half * 2) / stripeW); i++) {
+      ctx.fillStyle = i % 2 === 0 ? "rgba(196, 168, 90, 0.28)" : "rgba(28, 24, 36, 0.55)";
+      ctx.fillRect(x - half + i * stripeW, y + thick - 12, stripeW, 8);
+    }
+
+    ctx.strokeStyle = "#a098b0";
+    ctx.lineWidth = 10;
     ctx.beginPath();
-    ctx.ellipse(x, y - 2, 78, 20, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, y - 2, 120, 20, 0, 0, Math.PI * 2);
     ctx.stroke();
     ctx.strokeStyle = "#5a5468";
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.ellipse(x, y - 2, 62, 14, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, y - 2, 96, 14, 0, 0, Math.PI * 2);
     ctx.stroke();
 
     ctx.fillStyle = "#c4b8a0";
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2;
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
       ctx.beginPath();
-      ctx.arc(x + Math.cos(a) * 78, y - 2 + Math.sin(a) * 20, 3.2, 0, Math.PI * 2);
+      ctx.arc(x + Math.cos(a) * 120, y - 2 + Math.sin(a) * 20, 3.4, 0, Math.PI * 2);
       ctx.fill();
     }
 
     ctx.fillStyle = "#3a3648";
     ctx.beginPath();
-    ctx.ellipse(x, y - 2, 48, 11, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, y - 2, 72, 11, 0, 0, Math.PI * 2);
     ctx.fill();
-
-    ctx.fillStyle = "#524c62";
-    ctx.fillRect(x - half + 22, y - 6, 34, 16);
-    ctx.fillRect(x + half - 56, y - 6, 34, 16);
-    ctx.fillStyle = "#7a90a0";
-    ctx.fillRect(x - half + 28, y - 2, 10, 6);
-    ctx.fillRect(x + half - 42, y - 2, 10, 6);
   }
 
   function drawLpws() {
     const { x, y, angle, barrelLen } = lpws;
     const tanMid = "#9a7348";
+    const hw = 86;
 
-    // Tan armored pedestal (fixed, world space)
     ctx.fillStyle = "rgba(0,0,0,0.35)";
     ctx.beginPath();
-    ctx.ellipse(x, y + 28, 48, 12, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, y + 38, hw + 6, 12, 0, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.fillStyle = "#c4a76a";
     ctx.beginPath();
-    ctx.moveTo(x - 42, y + 6);
-    ctx.lineTo(x - 36, y + 32);
-    ctx.lineTo(x + 36, y + 32);
-    ctx.lineTo(x + 42, y + 6);
-    ctx.lineTo(x + 28, y - 2);
-    ctx.lineTo(x - 28, y - 2);
+    ctx.moveTo(x - hw, y + 8);
+    ctx.lineTo(x - hw + 10, y + 40);
+    ctx.lineTo(x + hw - 10, y + 40);
+    ctx.lineTo(x + hw, y + 8);
+    ctx.lineTo(x + hw - 18, y - 4);
+    ctx.lineTo(x - hw + 18, y - 4);
     ctx.closePath();
     ctx.fill();
 
     ctx.fillStyle = tanMid;
     ctx.beginPath();
-    ctx.moveTo(x - 42, y + 6);
-    ctx.lineTo(x - 36, y + 32);
-    ctx.lineTo(x - 20, y + 32);
-    ctx.lineTo(x - 28, y + 6);
+    ctx.moveTo(x - hw, y + 8);
+    ctx.lineTo(x - hw + 10, y + 40);
+    ctx.lineTo(x - hw + 32, y + 40);
+    ctx.lineTo(x - hw + 22, y + 8);
     ctx.closePath();
     ctx.fill();
 
     ctx.fillStyle = "#a88858";
-    ctx.fillRect(x - 30, y + 4, 60, 8);
+    ctx.fillRect(x - 56, y + 6, 112, 10);
 
     ctx.strokeStyle = "rgba(60,40,20,0.35)";
     ctx.lineWidth = 1;
-    ctx.strokeRect(x - 22, y + 14, 18, 12);
-    ctx.strokeRect(x + 4, y + 14, 18, 12);
+    ctx.strokeRect(x - 48, y + 18, 36, 14);
+    ctx.strokeRect(x + 12, y + 18, 36, 14);
 
     ctx.fillStyle = "#e8c84a";
-    ctx.fillRect(x - 14, y + 26, 28, 4);
+    ctx.fillRect(x - 22, y + 34, 44, 5);
 
     ctx.strokeStyle = "#8a6a42";
     ctx.lineWidth = 1.5;
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 4; i++) {
       ctx.beginPath();
-      ctx.moveTo(x - 40, y + 10 + i * 6);
-      ctx.lineTo(x - 34, y + 10 + i * 6);
+      ctx.moveTo(x - hw + 4, y + 12 + i * 7);
+      ctx.lineTo(x - hw + 16, y + 12 + i * 7);
       ctx.stroke();
     }
 
-    // Upper assembly: local +X = barrel aim direction
     ctx.save();
-    ctx.translate(x, y - 4);
+    ctx.translate(x, y - 6);
     ctx.rotate(angle);
+    ctx.scale(TURRET_SCALE, TURRET_SCALE);
 
     // Dark mount yoke
     ctx.fillStyle = "#3a4048";
@@ -1279,8 +1302,8 @@
     drawReticle();
     drawIncomingBanner();
 
-    ctx.fillStyle = "rgba(40, 24, 50, 0.22)";
-    ctx.fillRect(0, H - 40, W, 40);
+    ctx.fillStyle = "rgba(18, 12, 28, 0.28)";
+    ctx.fillRect(0, H - 18, W, 18);
 
     ctx.restore();
   }
