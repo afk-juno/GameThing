@@ -402,6 +402,7 @@
   const AIM_MIN = -Math.PI + 0.15;
   const AIM_MAX = -0.15;
   const MAX_AMMO = 300;
+  const SWARM_AMMO = 450;
   const RELOAD_MS = 3000;
   const INFINITE_AMMO_MS = 5000;
   const CRATE_HIT_R = 24;
@@ -462,6 +463,10 @@
     return wave >= 5 && wave % 5 === 0;
   }
 
+  function magazineSize() {
+    return isSwarmWave(state.wave) ? SWARM_AMMO : MAX_AMMO;
+  }
+
   function spawnDelayMs(wave) {
     let delay = Math.max(MIN_SPAWN_MS, BASE_SPAWN_MS * Math.pow(0.9, wave - 1));
     if (isSwarmWave(wave)) delay = Math.max(MIN_SPAWN_MS * 0.5, delay / 2);
@@ -478,7 +483,15 @@
     state.spawnTimer = 0;
     state.waveBreak = false;
     state.waveBreakTimer = 0;
-    state.swarmBanner = isSwarmWave(state.wave) ? 2400 : 0;
+    if (isSwarmWave(state.wave)) {
+      state.swarmBanner = 2400;
+      state.ammo = SWARM_AMMO;
+      state.reloading = false;
+      state.reloadTimer = 0;
+    } else {
+      state.swarmBanner = 0;
+      if (state.ammo > MAX_AMMO) state.ammo = MAX_AMMO;
+    }
     updateHud();
   }
 
@@ -625,13 +638,14 @@
   }
 
   function updateAmmoHud() {
+    const mag = magazineSize();
     if (state.infiniteAmmo) {
-      ammoEl.textContent = `MAX / ${MAX_AMMO}`;
+      ammoEl.textContent = `MAX / ${mag}`;
       ammoEl.classList.add("maxed");
       ammoEl.classList.remove("low");
       reloadStatusEl.hidden = true;
     } else {
-      ammoEl.textContent = `${state.ammo} / ${MAX_AMMO}`;
+      ammoEl.textContent = `${state.ammo} / ${mag}`;
       ammoEl.classList.toggle("low", state.ammo <= 40 && !state.reloading);
       ammoEl.classList.remove("maxed");
       reloadStatusEl.hidden = !state.reloading;
@@ -647,7 +661,7 @@
 
   function requestReload() {
     if (!state.running || state.reloading || state.infiniteAmmo) return;
-    if (state.ammo >= MAX_AMMO) return;
+    if (state.ammo >= magazineSize()) return;
     state.reloading = true;
     state.reloadTimer = 0;
     AudioFX.setFiring(false);
@@ -672,7 +686,7 @@
     state.crates.splice(i, 1);
     state.reloading = false;
     state.reloadTimer = 0;
-    state.ammo = MAX_AMMO;
+    state.ammo = magazineSize();
     state.infiniteAmmo = true;
     state.infiniteAmmoTimer = INFINITE_AMMO_MS;
     state.maxAmmoNotice = 2200;
@@ -1003,7 +1017,7 @@
       if (state.infiniteAmmoTimer <= 0) {
         state.infiniteAmmo = false;
         state.infiniteAmmoTimer = 0;
-        state.ammo = MAX_AMMO;
+        state.ammo = magazineSize();
         state.turretGlow = 0;
         updateAmmoHud();
       }
@@ -1023,7 +1037,7 @@
       if (state.reloadTimer >= RELOAD_MS) {
         state.reloading = false;
         state.reloadTimer = 0;
-        state.ammo = MAX_AMMO;
+        state.ammo = magazineSize();
         updateAmmoHud();
         if (state.fireHeld && canFire()) AudioFX.setFiring(true);
       }
@@ -1907,7 +1921,7 @@
     ctx.fillText("SWARM WAVE", W / 2, H * 0.16 + 32);
     ctx.font = "13px Share Tech Mono, monospace";
     ctx.fillStyle = "rgba(232, 210, 190, 0.85)";
-    ctx.fillText("DOUBLE SPAWN  ·  MORTARS + DRONES", W / 2, H * 0.16 + 58);
+    ctx.fillText("DOUBLE SPAWN  ·  450 RD  ·  MORTARS + DRONES", W / 2, H * 0.16 + 58);
     ctx.restore();
   }
 
